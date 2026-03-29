@@ -103,7 +103,7 @@ class Game {
     await this.executeAction('red', redDecision);
     if (this.gameOver) return;
 
-    await this.delay(200);
+    await this.delay(100);
 
     // ── Blue's turn: await pre-fetched decision (likely already ready) ──
     if (this.onTurnStart) this.onTurnStart('blue');
@@ -146,7 +146,7 @@ class Game {
 
     // Auto-play or wait for step
     if (this.autoPlay) {
-      await this.delay(300);
+      await this.delay(150);
       this.nextRound();
     } else {
       this.waitingForStep = true;

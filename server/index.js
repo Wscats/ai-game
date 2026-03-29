@@ -76,9 +76,9 @@ function callCodeBuddy(model, prompt, useSchema = true) {
     let stdout = '';
     let stderr = '';
     const child = spawn('codebuddy', args, {
-      timeout: 60000,
+      timeout: 30000,
       env: { ...process.env },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     child.stdout.on('data', (data) => { stdout += data.toString(); });
