@@ -229,17 +229,19 @@ async function handleAIDecision(req, res) {
       let parsed;
       let parseMethod = 'none';
 
+      console.log(`[${model}] Prompt:\n${prompt}`);
+
       // Try with JSON schema first, fallback to plain text
       try {
         rawResponse = await callCodeBuddy(model, prompt, true);
-        console.log(`[${model}] Raw response:`, rawResponse.substring(0, 200));
+        console.log(`[${model}] Raw response:\n${rawResponse}`);
         parsed = parseAIResponse(rawResponse);
         if (parsed) parseMethod = 'schema';
       } catch (schemaErr) {
         console.warn(`[${model}] Schema mode failed, retrying without schema...`);
         try {
           rawResponse = await callCodeBuddy(model, prompt, false);
-          console.log(`[${model}] Fallback response:`, rawResponse.substring(0, 200));
+          console.log(`[${model}] Fallback response:\n${rawResponse}`);
           parsed = parseAIResponse(rawResponse);
           if (parsed) parseMethod = 'fallback';
         } catch (fallbackErr) {
@@ -310,16 +312,18 @@ async function handleAIDecisionBatch(req, res) {
         let parseMethod = 'none';
         let error = null;
 
+        console.log(`[${model}] Prompt:\n${prompt}`);
+
         try {
           rawResponse = await callCodeBuddy(model, prompt, true);
-          console.log(`[${model}] Raw response:`, rawResponse.substring(0, 200));
+          console.log(`[${model}] Raw response:\n${rawResponse}`);
           parsed = parseAIResponse(rawResponse);
           if (parsed) parseMethod = 'schema';
         } catch (schemaErr) {
           console.warn(`[${model}] Schema mode failed, retrying without schema...`);
           try {
             rawResponse = await callCodeBuddy(model, prompt, false);
-            console.log(`[${model}] Fallback response:`, rawResponse.substring(0, 200));
+            console.log(`[${model}] Fallback response:\n${rawResponse}`);
             parsed = parseAIResponse(rawResponse);
             if (parsed) parseMethod = 'fallback';
           } catch (fallbackErr) {

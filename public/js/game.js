@@ -60,64 +60,84 @@ class Game {
     this.tankRed.tickCooldown();
     this.tankBlue.tickCooldown();
 
-    // Parallel AI requests for both players
-    if (this.onTurnStart) this.onTurnStart('both');
-    if (this.onThought) {
-      this.onThought('red', '🤔 思考中...');
-      this.onThought('blue', '🤔 思考中...');
-    }
+    // ── Red's turn: request AI decision ──
+    if (this.onTurnStart) this.onTurnStart('red');
+    if (this.onThought) this.onThought('red', '🤔 思考中...');
 
     const gameStateRed = this.buildGameState('red');
-    const gameStateBlue = this.buildGameState('blue');
+    let redDecision;
 
-    let redDecision, blueDecision;
+    // Fetch red decision; simultaneously pre-fetch blue decision in background
+    let bluePrefetchPromise = null;
 
     try {
-      const response = await fetch('/api/ai-decision-batch', {
+      const redResponse = await fetch('/api/ai-decision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requests: [
-            { model: this.config.p1Model, gameState: gameStateRed, playerId: 'red' },
-            { model: this.config.p2Model, gameState: gameStateBlue, playerId: 'blue' },
-          ],
-        }),
+        body: JSON.stringify({ model: this.config.p1Model, gameState: gameStateRed, playerId: 'red' }),
       });
-      const data = await response.json();
+      const redData = await redResponse.json();
+      redDecision = redData.decision;
+      if (this.onThought) this.onThought('red', redDecision.thought || '...');
+      if (this.onAIDetail) this.onAIDetail('red', redData.detail);
 
-      for (const r of data.results) {
-        if (r.playerId === 'red') {
-          redDecision = r.decision;
-          if (this.onThought) this.onThought('red', redDecision.thought || '...');
-          if (this.onAIDetail) this.onAIDetail('red', r.detail);
-        } else {
-          blueDecision = r.decision;
-          if (this.onThought) this.onThought('blue', blueDecision.thought || '...');
-          if (this.onAIDetail) this.onAIDetail('blue', r.detail);
-        }
-      }
+      // Pre-fetch blue decision immediately (runs in background while red acts)
+      const gameStateBlue = this.buildGameState('blue');
+      if (this.onThought) this.onThought('blue', '🤔 思考中...');
+      bluePrefetchPromise = fetch('/api/ai-decision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: this.config.p2Model, gameState: gameStateBlue, playerId: 'blue' }),
+      }).then(r => r.json()).catch(() => null);
+
     } catch (err) {
-      console.error('Batch AI request failed:', err);
-      redDecision = { action: 'wait', thought: '[网络错误]' };
-      blueDecision = { action: 'wait', thought: '[网络错误]' };
-      if (this.onThought) {
-        this.onThought('red', '[请求失败]');
-        this.onThought('blue', '[请求失败]');
-      }
+      console.error('Red AI request failed:', err);
+      redDecision = { action: 'wait', thought: '[请求失败]' };
+      if (this.onThought) this.onThought('red', '[请求失败]');
     }
 
     if (!redDecision) redDecision = { action: 'wait', thought: '[无响应]' };
-    if (!blueDecision) blueDecision = { action: 'wait', thought: '[无响应]' };
 
-    // Execute red turn
+    // ── Execute red's action (blue AI is being fetched in parallel) ──
     this.currentTurn = 'red';
     await this.executeAction('red', redDecision);
     if (this.gameOver) return;
 
-    // Small delay between turns
     await this.delay(200);
 
-    // Execute blue turn
+    // ── Blue's turn: await pre-fetched decision (likely already ready) ──
+    if (this.onTurnStart) this.onTurnStart('blue');
+
+    let blueDecision;
+    try {
+      const blueData = bluePrefetchPromise ? await bluePrefetchPromise : null;
+      if (blueData && blueData.decision) {
+        blueDecision = blueData.decision;
+        if (this.onThought) this.onThought('blue', blueDecision.thought || '...');
+        if (this.onAIDetail) this.onAIDetail('blue', blueData.detail);
+      } else {
+        // Fallback: fetch now if prefetch failed or wasn't started
+        if (this.onThought) this.onThought('blue', '🤔 思考中...');
+        const gameStateBlue = this.buildGameState('blue');
+        const blueResponse = await fetch('/api/ai-decision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: this.config.p2Model, gameState: gameStateBlue, playerId: 'blue' }),
+        });
+        const blueDataFallback = await blueResponse.json();
+        blueDecision = blueDataFallback.decision;
+        if (this.onThought) this.onThought('blue', blueDecision.thought || '...');
+        if (this.onAIDetail) this.onAIDetail('blue', blueDataFallback.detail);
+      }
+    } catch (err) {
+      console.error('Blue AI request failed:', err);
+      blueDecision = { action: 'wait', thought: '[请求失败]' };
+      if (this.onThought) this.onThought('blue', '[请求失败]');
+    }
+
+    if (!blueDecision) blueDecision = { action: 'wait', thought: '[无响应]' };
+
+    // ── Execute blue's action ──
     this.currentTurn = 'blue';
     await this.executeAction('blue', blueDecision);
     if (this.gameOver) return;

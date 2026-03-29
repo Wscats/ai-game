@@ -243,30 +243,18 @@
 
   function showTurnIndicator(playerId) {
     const el = $('turn-indicator');
-    if (playerId === 'both') {
-      el.className = 'turn-indicator turn-both turn-thinking';
-      el.innerHTML = `<span class="spinner"></span>🔴🔵 双方同时思考中...`;
-      // Flash overlay
-      const overlay = $('turn-overlay');
-      const overlayText = $('turn-overlay-text');
-      overlayText.className = 'turn-overlay-text both';
-      overlayText.textContent = `🔴🔵 双方同时思考`;
-      overlay.style.display = 'flex';
-      setTimeout(() => { overlay.style.display = 'none'; }, 1000);
-    } else {
-      el.className = 'turn-indicator turn-' + playerId + ' turn-thinking';
-      const icon = playerId === 'red' ? '🔴' : '🔵';
-      const name = playerId === 'red' ? game.config.p1Name : game.config.p2Name;
-      el.innerHTML = `<span class="spinner"></span>${icon} ${name} 思考中...`;
+    el.className = 'turn-indicator turn-' + playerId + ' turn-thinking';
+    const icon = playerId === 'red' ? '🔴' : '🔵';
+    const name = playerId === 'red' ? game.config.p1Name : game.config.p2Name;
+    el.innerHTML = `<span class="spinner"></span>${icon} ${name} 思考中...`;
 
-      // Flash overlay
-      const overlay = $('turn-overlay');
-      const overlayText = $('turn-overlay-text');
-      overlayText.className = 'turn-overlay-text ' + playerId;
-      overlayText.textContent = `${icon} ${name} 的回合`;
-      overlay.style.display = 'flex';
-      setTimeout(() => { overlay.style.display = 'none'; }, 1200);
-    }
+    // Flash overlay
+    const overlay = $('turn-overlay');
+    const overlayText = $('turn-overlay-text');
+    overlayText.className = 'turn-overlay-text ' + playerId;
+    overlayText.textContent = `${icon} ${name} 的回合`;
+    overlay.style.display = 'flex';
+    setTimeout(() => { overlay.style.display = 'none'; }, 1000);
   }
 
   function updateThought(playerId, thought) {
