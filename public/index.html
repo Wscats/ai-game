@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Tank Battle - 回合制 AI 坦克大战</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ========== Config Screen ========== -->
+  <div id="config-screen" class="screen active">
+    <div class="config-container">
+      <h1 class="title">🎮 AI 坦克大战</h1>
+      <p class="subtitle">回合制 · 通过 CodeBuddy CLI 接入大模型 · 让 AI 操控坦克一决高下</p>
+
+      <div class="config-panels">
+        <!-- Red Player -->
+        <div class="config-panel panel-red">
+          <h2>🔴 红方</h2>
+          <div class="form-group">
+            <label>选择模型</label>
+            <select id="p1-model"></select>
+          </div>
+          <div class="form-group">
+            <label>显示名称</label>
+            <input type="text" id="p1-name" value="DeepSeek" placeholder="AI名称">
+          </div>
+        </div>
+
+        <div class="vs-divider"><span>VS</span></div>
+
+        <!-- Blue Player -->
+        <div class="config-panel panel-blue">
+          <h2>🔵 蓝方</h2>
+          <div class="form-group">
+            <label>选择模型</label>
+            <select id="p2-model"></select>
+          </div>
+          <div class="form-group">
+            <label>显示名称</label>
+            <input type="text" id="p2-name" value="Kimi" placeholder="AI名称">
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Settings -->
+      <div class="game-settings">
+        <h3>⚙️ 游戏设置</h3>
+        <div class="settings-row">
+          <div class="form-group">
+            <label>地图尺寸</label>
+            <select id="map-size">
+              <option value="small">小 (600×400)</option>
+              <option value="medium" selected>中 (800×600)</option>
+              <option value="large">大 (1000×700)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>障碍物</label>
+            <select id="obstacle-count">
+              <option value="3">少 (3)</option>
+              <option value="6" selected>中 (6)</option>
+              <option value="10">多 (10)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>最大回合数</label>
+            <input type="number" id="max-rounds" value="30" min="10" max="100" step="5">
+          </div>
+        </div>
+      </div>
+
+      <div id="server-status" class="server-status disconnected">🔴 检测服务器连接中...</div>
+      <button id="btn-start" class="btn btn-start btn-disabled" disabled>⚔️ 开始战斗</button>
+      <p class="hint">启动服务器: <code>npm start</code> 或 <code>node server/index.js</code></p>
+    </div>
+  </div>
+
+  <!-- ========== Game Screen ========== -->
+  <div id="game-screen" class="screen">
+    <div class="game-layout">
+      <!-- Left Panel: Red -->
+      <div class="side-panel panel-red-bg">
+        <div class="tank-info">
+          <div class="tank-avatar" id="g-p1-icon">🔴</div>
+          <div class="tank-name" id="g-p1-name">DeepSeek</div>
+          <div class="model-tag" id="g-p1-model">deepseek-v3</div>
+          <div class="tank-hp-bar"><div class="hp-fill hp-red" id="g-p1-hp" style="width:100%"></div></div>
+          <div class="tank-hp-text" id="g-p1-hp-text">HP: 100/100</div>
+          <div class="tank-stats">
+            <div>命中: <span id="g-p1-hits">0</span></div>
+            <div>开火: <span id="g-p1-shots">0</span></div>
+            <div>命中率: <span id="g-p1-accuracy">0%</span></div>
+          </div>
+        </div>
+        <div class="ai-thought">
+          <div class="thought-title">🧠 AI 思考</div>
+          <div class="thought-content" id="g-p1-thought">等待中...</div>
+        </div>
+        <div class="ai-detail">
+          <div class="thought-title">📊 AI 交互详情</div>
+          <div class="detail-content" id="g-p1-detail">
+            <span class="detail-placeholder">等待AI响应...</span>
+          </div>
+        </div>
+        <div class="action-history">
+          <div class="thought-title">📋 行动记录</div>
+          <div class="history-list" id="g-p1-history"></div>
+        </div>
+      </div>
+
+      <!-- Center: Canvas -->
+      <div class="game-center">
+        <div class="game-header">
+          <span class="round-info">回合 <span id="round-num" class="round-num-big">0</span> / <span id="max-round-num">30</span></span>
+          <span class="turn-indicator" id="turn-indicator">准备中...</span>
+          <div class="game-controls">
+            <button id="btn-auto" class="btn btn-sm btn-active">▶ 自动</button>
+            <button id="btn-step" class="btn btn-sm">⏭ 单步</button>
+            <button id="btn-quit" class="btn btn-sm btn-danger">🚪 退出</button>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="game-canvas"></canvas>
+          <!-- Turn overlay -->
+          <div id="turn-overlay" class="turn-overlay" style="display:none">
+            <div class="turn-overlay-text" id="turn-overlay-text"></div>
+          </div>
+        </div>
+        <div class="game-log-bar">
+          <div id="game-log" class="game-log-scroll"></div>
+        </div>
+      </div>
+
+      <!-- Right Panel: Blue -->
+      <div class="side-panel panel-blue-bg">
+        <div class="tank-info">
+          <div class="tank-avatar" id="g-p2-icon">🔵</div>
+          <div class="tank-name" id="g-p2-name">Kimi</div>
+          <div class="model-tag" id="g-p2-model">kimi-k2.5</div>
+          <div class="tank-hp-bar"><div class="hp-fill hp-blue" id="g-p2-hp" style="width:100%"></div></div>
+          <div class="tank-hp-text" id="g-p2-hp-text">HP: 100/100</div>
+          <div class="tank-stats">
+            <div>命中: <span id="g-p2-hits">0</span></div>
+            <div>开火: <span id="g-p2-shots">0</span></div>
+            <div>命中率: <span id="g-p2-accuracy">0%</span></div>
+          </div>
+        </div>
+        <div class="ai-thought">
+          <div class="thought-title">🧠 AI 思考</div>
+          <div class="thought-content" id="g-p2-thought">等待中...</div>
+        </div>
+        <div class="ai-detail">
+          <div class="thought-title">📊 AI 交互详情</div>
+          <div class="detail-content" id="g-p2-detail">
+            <span class="detail-placeholder">等待AI响应...</span>
+          </div>
+        </div>
+        <div class="action-history">
+          <div class="thought-title">📋 行动记录</div>
+          <div class="history-list" id="g-p2-history"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Result Screen ========== -->
+  <div id="result-screen" class="screen">
+    <div class="result-container">
+      <h1 id="result-title" class="result-title">🏆 战斗结束</h1>
+      <div id="result-winner" class="result-winner"></div>
+      <div class="result-replay" id="result-replay"></div>
+      <div class="result-stats" id="result-stats"></div>
+      <div class="result-buttons">
+        <button id="btn-rematch" class="btn btn-start">🔄 再来一局</button>
+        <button id="btn-back" class="btn btn-secondary">🏠 返回配置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/constants.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/tank.js"></script>
+  <script src="js/bullet.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

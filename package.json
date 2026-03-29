@@ -1,0 +1,12 @@
+{
+  "name": "ai-tank-battle",
+  "version": "1.0.0",
+  "description": "AI Tank Battle - Turn-based tank game powered by LLM models via CodeBuddy CLI",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "keywords": ["ai", "tank", "battle", "llm", "game"],
+  "license": "MIT"
+}
