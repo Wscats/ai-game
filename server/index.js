@@ -170,9 +170,11 @@ Distance=${gameState.distance} AngleToEnemy=${gameState.angleToEnemy}° NeedRota
 LineOfSight=${gameState.lineOfSight ? 'CLEAR' : 'BLOCKED'}
 Obstacles: ${gameState.obstacles.map(o => `${o.type}(${o.x},${o.y})`).join(', ')}
 Bullets: ${gameState.bullets.length > 0 ? gameState.bullets.map(b => `${b.owner}(${b.x},${b.y})@${b.angle}°`).join(', ') : 'None'}
+FieldEvents: ${gameState.fieldEvents && gameState.fieldEvents.length > 0 ? gameState.fieldEvents.map(e => `${e.type}@(${e.x},${e.y})`).join(', ') : 'None'}
 
 Actions: move_forward(30px), move_backward(30px), rotate_left(30°), rotate_right(30°), fire(if canFire), wait
 Rules: bullet=20dmg, brick walls break, steel walls reflect.
+IMPORTANT: You MUST move every turn (wait/rotate will trigger forced move). supply=+30HP, mine=-25HP.
 
 Reply ONLY JSON: {"action":"chosen_action","thought":"brief Chinese reason <30chars"}`;
 }

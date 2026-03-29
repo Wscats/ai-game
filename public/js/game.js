@@ -23,6 +23,7 @@ class Game {
     this.autoPlay = true;
     this.waitingForStep = false;
     this.history = []; // Full game history
+    this.randomEvents = []; // Active random events on map
 
     // Callbacks
     this.onLog = null;
@@ -36,12 +37,13 @@ class Game {
   start() {
     this.log('🎮 回合制坦克大战开始！', 'system');
     this.log(`🔴 ${this.config.p1Name} (${this.config.p1Model}) VS 🔵 ${this.config.p2Name} (${this.config.p2Model})`, 'system');
+    this.log('⚠️ 规则：每回合必须移动！', 'system');
     this.renderState();
     this.nextRound();
   }
 
   renderState() {
-    this.renderer.render({ map: this.map, tanks: [this.tankRed, this.tankBlue] });
+    this.renderer.render({ map: this.map, tanks: [this.tankRed, this.tankBlue], events: this.randomEvents });
     if (this.onUpdate) this.onUpdate(this.getUIState());
   }
 
@@ -59,6 +61,11 @@ class Game {
     // Tick cooldowns
     this.tankRed.tickCooldown();
     this.tankBlue.tickCooldown();
+
+    // Trigger random event (every 3~5 rounds)
+    if (this.round > 1 && this.round % (3 + Math.floor(Math.random() * 3)) === 0) {
+      this.triggerRandomEvent();
+    }
 
     // ── Red's turn: request AI decision ──
     if (this.onTurnStart) this.onTurnStart('red');
@@ -153,6 +160,121 @@ class Game {
     }
   }
 
+  /**
+   * Force a movement action for a tank (forward > backward > rotate)
+   */
+  forceMoveAction(tank) {
+    if (tank.moveForward(this.map)) return '强制前进';
+    if (tank.moveBackward(this.map)) return '强制后退';
+    tank.rotateRight();
+    return `强制右转 → ${tank.angle}°`;
+  }
+
+  /**
+   * Trigger a random battlefield event
+   */
+  triggerRandomEvent() {
+    const events = [
+      { type: 'supply', weight: 3 },   // Supply box: heal
+      { type: 'mine', weight: 2 },      // Mine: damage on move
+      { type: 'emp', weight: 1 },       // EMP: reset cooldowns
+      { type: 'collapse', weight: 2 },  // Obstacle collapse
+      { type: 'airstrike', weight: 1 }, // Airstrike: random area damage
+    ];
+    const total = events.reduce((s, e) => s + e.weight, 0);
+    let r = Math.random() * total;
+    let chosen = events[0];
+    for (const e of events) { r -= e.weight; if (r <= 0) { chosen = e; break; } }
+
+    const margin = 60;
+    const ex = margin + Math.random() * (this.map.width - margin * 2);
+    const ey = margin + Math.random() * (this.map.height - margin * 2);
+
+    switch (chosen.type) {
+      case 'supply': {
+        // Place supply box at random position
+        const event = { type: 'supply', x: ex, y: ey, radius: 20, active: true };
+        this.randomEvents.push(event);
+        this.log(`📦 补给箱出现在 (${Math.round(ex)}, ${Math.round(ey)})！移动经过可回复 30HP`, 'system');
+        break;
+      }
+      case 'mine': {
+        const event = { type: 'mine', x: ex, y: ey, radius: 18, active: true };
+        this.randomEvents.push(event);
+        this.log(`💣 地雷埋设在 (${Math.round(ex)}, ${Math.round(ey)})！踩中扣 25HP`, 'system');
+        break;
+      }
+      case 'emp': {
+        // EMP: both tanks' cooldowns reset to max
+        this.tankRed.cooldown = 3;
+        this.tankBlue.cooldown = 3;
+        this.log(`⚡ 电磁脉冲！双方炮管冷却重置为 3 回合`, 'system');
+        break;
+      }
+      case 'collapse': {
+        // Destroy a random brick obstacle
+        const bricks = this.map.obstacles.filter(o => o.type === 'brick');
+        if (bricks.length > 0) {
+          const target = bricks[Math.floor(Math.random() * bricks.length)];
+          this.map.damageObstacle(target);
+          this.renderer.addExplosion(target.x + target.width / 2, target.y + target.height / 2, 20);
+          this.log(`🧱 地图坍塌！一处砖墙被摧毁`, 'system');
+        } else {
+          this.log(`🌪️ 风暴来袭！但无砖墙可摧毁`, 'system');
+        }
+        break;
+      }
+      case 'airstrike': {
+        // Airstrike: deal 15 damage to any tank within radius 80
+        const strikeRadius = 80;
+        let hit = false;
+        for (const tank of [this.tankRed, this.tankBlue]) {
+          const dist = Math.sqrt((tank.x - ex) ** 2 + (tank.y - ey) ** 2);
+          if (dist <= strikeRadius) {
+            tank.takeDamage(15);
+            const tIcon = tank.id === 'red' ? '🔴' : '🔵';
+            this.renderer.addExplosion(tank.x, tank.y, 30);
+            this.log(`✈️ 空袭命中 ${tIcon} ${tank.name}！(-15HP → ${tank.hp}HP)`, 'damage');
+            hit = true;
+            if (!tank.alive) { this.endGame(tank.id === 'red' ? 'blue' : 'red'); return; }
+          }
+        }
+        if (!hit) this.log(`✈️ 空袭落点 (${Math.round(ex)}, ${Math.round(ey)})，未命中任何坦克`, 'system');
+        this.renderer.addExplosion(ex, ey, 25);
+        break;
+      }
+    }
+    this.renderState();
+  }
+
+  /**
+   * Check if a tank triggers any active random events
+   */
+  checkRandomEvents(tank) {
+    for (const event of this.randomEvents) {
+      if (!event.active) continue;
+      const dist = Math.sqrt((tank.x - event.x) ** 2 + (tank.y - event.y) ** 2);
+      if (dist <= event.radius + tank.size / 2) {
+        event.active = false;
+        const icon = tank.id === 'red' ? '🔴' : '🔵';
+        if (event.type === 'supply') {
+          const heal = Math.min(30, tank.maxHp - tank.hp);
+          tank.hp += heal;
+          this.log(`📦 ${icon} ${tank.name} 拾取补给箱！(+${heal}HP → ${tank.hp}HP)`, tank.id);
+          this.renderer.addExplosion(tank.x, tank.y, 15);
+        } else if (event.type === 'mine') {
+          tank.takeDamage(25);
+          this.log(`💣 ${icon} ${tank.name} 踩中地雷！(-25HP → ${tank.hp}HP)`, 'damage');
+          this.renderer.addExplosion(tank.x, tank.y, 25);
+          if (!tank.alive) { this.endGame(tank.id === 'red' ? 'blue' : 'red'); return true; }
+        }
+      }
+    }
+    // Clean up inactive events
+    this.randomEvents = this.randomEvents.filter(e => e.active);
+    return false;
+  }
+
   async executeAction(playerId, decision) {
     if (this.gameOver) return;
 
@@ -161,15 +283,18 @@ class Game {
 
     const action = decision.action;
     let actionDesc = '';
+    let didMove = false; // Track if tank physically moved this turn
 
     switch (action) {
       case 'move_forward':
         const fwd = tank.moveForward(this.map);
         actionDesc = fwd ? '前进' : '前进(被阻挡)';
+        didMove = fwd;
         break;
       case 'move_backward':
         const bwd = tank.moveBackward(this.map);
         actionDesc = bwd ? '后退' : '后退(被阻挡)';
+        didMove = bwd;
         break;
       case 'rotate_left':
         tank.rotateLeft();
@@ -218,6 +343,19 @@ class Game {
         break;
     }
 
+    // ── Mandatory move rule: if tank didn't physically move, force a move ──
+    if (!didMove && action !== 'move_forward' && action !== 'move_backward') {
+      const forcedDesc = this.forceMoveAction(tank);
+      this.log(`⚠️ ${icon} ${tank.name} 未移动，强制执行：${forcedDesc}`, 'system');
+      didMove = true;
+    }
+
+    // Check random events after movement
+    if (didMove) {
+      const died = this.checkRandomEvents(tank);
+      if (died) return;
+    }
+
     this.log(`${icon} ${tank.name}: ${actionDesc}`, playerId);
 
     // Record history
@@ -255,6 +393,9 @@ class Game {
       angleToEnemy: Math.round(angleToEnemy),
       angleDiff: Math.round(angleDiff),
       lineOfSight: this.map.hasLineOfSight(me.x, me.y, enemy.x, enemy.y),
+      fieldEvents: this.randomEvents.filter(e => e.active).map(e => ({
+        type: e.type, x: Math.round(e.x), y: Math.round(e.y),
+      })),
     };
   }
 
@@ -263,7 +404,8 @@ class Game {
       this.renderer.animateBullet(
         trail, owner, this.map,
         [this.tankRed, this.tankBlue],
-        resolve
+        resolve,
+        this.randomEvents
       );
     });
   }

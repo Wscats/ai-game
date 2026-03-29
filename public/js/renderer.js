@@ -13,7 +13,7 @@ class Renderer {
   resize(w, h) { this.canvas.width = w; this.canvas.height = h; }
 
   render(state) {
-    const { map, tanks } = state;
+    const { map, tanks, events } = state;
     const ctx = this.ctx;
     const W = map.width, H = map.height;
 
@@ -51,6 +51,51 @@ class Renderer {
         ctx.moveTo(obs.x, obs.y); ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
         ctx.moveTo(obs.x + obs.width, obs.y); ctx.lineTo(obs.x, obs.y + obs.height);
         ctx.stroke();
+      }
+    }
+
+    // Random events (supply boxes and mines)
+    if (events && events.length > 0) {
+      for (const ev of events) {
+        if (!ev.active) continue;
+        const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 300);
+        if (ev.type === 'supply') {
+          // Green supply box
+          ctx.save();
+          ctx.translate(ev.x, ev.y);
+          ctx.shadowColor = `rgba(46,204,113,${pulse})`;
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = `rgba(46,204,113,${0.85 * pulse})`;
+          ctx.fillRect(-12, -12, 24, 24);
+          ctx.strokeStyle = '#2ecc71';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-12, -12, 24, 24);
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('✚', 0, 0);
+          ctx.restore();
+        } else if (ev.type === 'mine') {
+          // Red mine
+          ctx.save();
+          ctx.translate(ev.x, ev.y);
+          ctx.shadowColor = `rgba(231,76,60,${pulse})`;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(0, 0, 12, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(231,76,60,${0.85 * pulse})`;
+          ctx.fill();
+          ctx.strokeStyle = '#c0392b';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('💣', 0, 1);
+          ctx.restore();
+        }
       }
     }
 
@@ -159,7 +204,7 @@ class Renderer {
   /**
    * Animate bullet travel, then call callback
    */
-  animateBullet(trail, owner, map, tanks, callback) {
+  animateBullet(trail, owner, map, tanks, callback, events) {
     if (trail.length < 2) { callback(); return; }
     this.animating = true;
     let idx = 0;
@@ -168,7 +213,7 @@ class Renderer {
       if (idx >= trail.length) idx = trail.length - 1;
       const partial = trail.slice(0, idx + 1);
       this.bulletTrails = [{ trail: partial, owner, time: Date.now() }];
-      this.render({ map, tanks });
+      this.render({ map, tanks, events });
       if (idx < trail.length - 1) {
         requestAnimationFrame(step);
       } else {
