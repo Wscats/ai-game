@@ -30,6 +30,73 @@ class Renderer {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
 
+    // Terrain patches (drawn below obstacles)
+    if (map.terrainPatches) {
+      for (const patch of map.terrainPatches) {
+        const info = TERRAIN_TYPES[patch.type];
+        if (!info || !info.color) continue;
+        ctx.fillStyle = info.color;
+        ctx.fillRect(patch.x, patch.y, patch.width, patch.height);
+
+        // Decorative details per terrain type
+        if (patch.type === 'forest') {
+          // Draw small tree dots
+          ctx.fillStyle = 'rgba(0,100,0,0.5)';
+          for (let tx = patch.x + 10; tx < patch.x + patch.width - 10; tx += 18) {
+            for (let ty = patch.y + 10; ty < patch.y + patch.height - 10; ty += 18) {
+              ctx.beginPath();
+              ctx.arc(tx + Math.sin(tx * ty) * 4, ty + Math.cos(tx + ty) * 4, 5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          // Border
+          ctx.strokeStyle = 'rgba(0,120,0,0.6)';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(patch.x, patch.y, patch.width, patch.height);
+        } else if (patch.type === 'water') {
+          // Wave lines
+          ctx.strokeStyle = 'rgba(100,180,255,0.5)';
+          ctx.lineWidth = 1;
+          for (let wy = patch.y + 8; wy < patch.y + patch.height; wy += 10) {
+            ctx.beginPath();
+            for (let wx = patch.x; wx < patch.x + patch.width; wx += 6) {
+              const waveY = wy + Math.sin((wx + Date.now() / 500) * 0.5) * 2;
+              wx === patch.x ? ctx.moveTo(wx, waveY) : ctx.lineTo(wx, waveY);
+            }
+            ctx.stroke();
+          }
+          // Border
+          ctx.strokeStyle = 'rgba(30,100,220,0.7)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(patch.x, patch.y, patch.width, patch.height);
+        } else if (patch.type === 'snow') {
+          // Snowflake dots
+          ctx.fillStyle = 'rgba(255,255,255,0.4)';
+          for (let sx = patch.x + 8; sx < patch.x + patch.width - 8; sx += 14) {
+            for (let sy = patch.y + 8; sy < patch.y + patch.height - 8; sy += 14) {
+              ctx.beginPath();
+              ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          // Border
+          ctx.strokeStyle = 'rgba(180,220,255,0.5)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(patch.x, patch.y, patch.width, patch.height);
+        }
+
+        // Terrain label
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const info2 = TERRAIN_TYPES[patch.type];
+        ctx.fillText(info2 ? info2.label : patch.type, patch.x + 3, patch.y + 3);
+        ctx.restore();
+      }
+    }
+
     // Obstacles
     for (const obs of map.obstacles) {
       if (obs.type === 'brick') {
@@ -95,6 +162,67 @@ class Renderer {
           ctx.textBaseline = 'middle';
           ctx.fillText('💣', 0, 1);
           ctx.restore();
+        } else if (ev.type === 'shield') {
+          // Blue shield orb
+          ctx.save();
+          ctx.translate(ev.x, ev.y);
+          ctx.shadowColor = `rgba(52,152,219,${pulse})`;
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.arc(0, 0, 13, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(52,152,219,${0.8 * pulse})`;
+          ctx.fill();
+          ctx.strokeStyle = '#2980b9';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🛡️', 0, 1);
+          ctx.restore();
+        } else if (ev.type === 'boost') {
+          // Yellow lightning orb
+          ctx.save();
+          ctx.translate(ev.x, ev.y);
+          ctx.shadowColor = `rgba(241,196,15,${pulse})`;
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.arc(0, 0, 13, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(241,196,15,${0.85 * pulse})`;
+          ctx.fill();
+          ctx.strokeStyle = '#f39c12';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('⚡', 0, 1);
+          ctx.restore();
+        } else if (ev.type === 'poison') {
+          // Purple poison cloud
+          ctx.save();
+          ctx.translate(ev.x, ev.y);
+          const r = ev.radius || 55;
+          const grad = ctx.createRadialGradient(0, 0, r * 0.1, 0, 0, r);
+          grad.addColorStop(0, `rgba(155,89,182,${0.55 * pulse})`);
+          grad.addColorStop(1, `rgba(155,89,182,0)`);
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(142,68,173,${0.5 * pulse})`;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = `rgba(255,255,255,${0.7 * pulse})`;
+          ctx.font = '16px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('☠️', 0, 0);
+          ctx.restore();
         }
       }
     }
@@ -137,10 +265,33 @@ class Renderer {
       ctx.fillStyle = `rgba(255,255,200,${a * 0.8})`; ctx.fill();
     }
 
-    // Tanks
+    // Tanks (forest tanks drawn semi-transparent to simulate hiding)
     for (const tank of tanks) {
       if (!tank.alive) continue;
+      ctx.save();
+      if (tank.currentTerrain === 'forest') ctx.globalAlpha = 0.45;
       this._drawTank(ctx, tank);
+      // Shield aura
+      if (tank.shielded) {
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(tank.x, tank.y, tank.size / 2 + 8, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(52,152,219,${0.6 + 0.4 * Math.sin(Date.now() / 200)})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+      // Boost aura
+      if (tank.boostTurns > 0) {
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(tank.x, tank.y, tank.size / 2 + 5, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(241,196,15,${0.5 + 0.5 * Math.sin(Date.now() / 150)})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
     }
 
     // Border
@@ -186,6 +337,7 @@ class Renderer {
     ctx.fillStyle = isRed ? CONST.COLOR_RED : CONST.COLOR_BLUE;
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
     ctx.fillText(tank.name, tank.x, barY - 3);
   }
 

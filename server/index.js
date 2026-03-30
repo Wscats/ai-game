@@ -13,6 +13,39 @@ const url = require('url');
 
 const PORT = 3000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const LOG_DIR = path.join(__dirname, '..', 'logs');
+
+// Ensure logs directory exists
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+
+/**
+ * Append AI interaction detail to daily log file
+ */
+function writeAILog(entry) {
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const logFile = path.join(LOG_DIR, `ai-interactions-${dateStr}.log`);
+  const timeStr = now.toISOString().replace('T', ' ').slice(0, 23);
+  const line = [
+    `[${timeStr}]`,
+    `round=${entry.round || '?'}`,
+    `player=${entry.playerId}`,
+    `model=${entry.model}`,
+    `action=${entry.action}`,
+    `thought=${entry.thought || ''}`,
+    `elapsed=${entry.elapsed}ms`,
+    `parse=${entry.parseMethod}`,
+    entry.error ? `error=${entry.error}` : null,
+    `--- PROMPT ---`,
+    entry.prompt,
+    `--- RESPONSE ---`,
+    entry.raw,
+    `================`,
+  ].filter(Boolean).join('\n') + '\n\n';
+  fs.appendFile(logFile, line, (err) => {
+    if (err) console.error('[Log] Write failed:', err.message);
+  });
+}
 
 // MIME types
 const MIME = {
@@ -162,19 +195,28 @@ function buildPrompt(gameState, playerId) {
   const enemyId = playerId === 'red' ? 'blue' : 'red';
   const enemy = gameState.tanks[enemyId];
 
+  const myTerrain = gameState.myTerrain || 'floor';
+  const enemyTerrain = gameState.enemyTerrain || 'floor';
+  const terrainRules = 'floor=normal, snow=60%speed, forest=70%speed+hidden, water=BLOCKED';
+  const terrainPatches = gameState.terrain && gameState.terrain.length > 0
+    ? gameState.terrain.map(t => `${t.type}(${t.x},${t.y},${t.width}x${t.height})`).join(', ')
+    : 'None';
+
   return `Tank battle game. You are ${playerId}.
 Map: ${gameState.mapWidth}x${gameState.mapHeight}, Round: ${gameState.round}/${gameState.maxRounds}
-YOU: pos(${me.x},${me.y}) angle=${me.angle}° HP=${me.hp}/${me.maxHp} canFire=${me.canFire}
-ENEMY: pos(${enemy.x},${enemy.y}) HP=${enemy.hp}/${enemy.maxHp}
+YOU: pos(${me.x},${me.y}) angle=${me.angle}° HP=${me.hp}/${me.maxHp} canFire=${me.canFire} terrain=${myTerrain}
+ENEMY: pos(${enemy.x},${enemy.y}) HP=${enemy.hp}/${enemy.maxHp} terrain=${enemyTerrain}
 Distance=${gameState.distance} AngleToEnemy=${gameState.angleToEnemy}° NeedRotate=${gameState.angleDiff > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(gameState.angleDiff).toFixed(0)}°
 LineOfSight=${gameState.lineOfSight ? 'CLEAR' : 'BLOCKED'}
 Obstacles: ${gameState.obstacles.map(o => `${o.type}(${o.x},${o.y})`).join(', ')}
-Bullets: ${gameState.bullets.length > 0 ? gameState.bullets.map(b => `${b.owner}(${b.x},${b.y})@${b.angle}°`).join(', ') : 'None'}
+Terrain: ${terrainPatches}
+TerrainRules: ${terrainRules}
 FieldEvents: ${gameState.fieldEvents && gameState.fieldEvents.length > 0 ? gameState.fieldEvents.map(e => `${e.type}@(${e.x},${e.y})`).join(', ') : 'None'}
 
-Actions: move_forward(30px), move_backward(30px), rotate_left(30°), rotate_right(30°), fire(if canFire), wait
-Rules: bullet=20dmg, brick walls break, steel walls reflect.
-IMPORTANT: You MUST move every turn (wait/rotate will trigger forced move). supply=+30HP, mine=-25HP.
+Actions: move_forward, move_backward, rotate_left(30°), rotate_right(30°), fire(if canFire)
+Rules: bullet=20dmg, brick walls DESTROYED by bullet, steel walls STOP bullet(no reflect). Forest hides you.
+Items: supply=+30HP, mine=-25HP, shield=absorb1hit, boost=2x speed 2turns, poison=cloud-8HP/round. Avoid water(impassable).
+IMPORTANT: NO waiting allowed - you MUST move every turn.
 
 Reply ONLY JSON: {"action":"chosen_action","thought":"brief Chinese reason <30chars"}`;
 }
@@ -260,6 +302,19 @@ async function handleAIDecision(req, res) {
       const decision = sanitizeDecision(parsed, gameState, playerId);
       console.log(`[${model}] Decision: ${decision.action} - ${decision.thought} (${elapsed}ms)`);
 
+      // Write to local log
+      writeAILog({
+        round: gameState.round,
+        playerId,
+        model,
+        action: decision.action,
+        thought: decision.thought,
+        elapsed,
+        parseMethod,
+        prompt,
+        raw: rawResponse,
+      });
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         success: true,
@@ -276,11 +331,24 @@ async function handleAIDecision(req, res) {
     } catch (err) {
       const elapsed = Date.now() - (Date.now()); // fallback
       console.error('[AI Decision Error]', err.message);
+      const fallback = generateFallbackDecision();
+      writeAILog({
+        round: 0,
+        playerId: 'unknown',
+        model: 'unknown',
+        action: fallback.action,
+        thought: fallback.thought,
+        elapsed: 0,
+        parseMethod: 'fallback_random',
+        prompt: '',
+        raw: '',
+        error: err.message,
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         success: false,
         error: err.message,
-        decision: generateFallbackDecision(),
+        decision: fallback,
         detail: {
           raw: '',
           elapsed: 0,
@@ -338,6 +406,12 @@ async function handleAIDecisionBatch(req, res) {
         if (!parsed) {
           const fallback = generateFallbackDecision();
           console.error(`[AI Decision Error] ${model}: ${error || 'parse failed'} (${elapsed}ms)`);
+          writeAILog({
+            round: gameState.round, playerId, model,
+            action: fallback.action, thought: fallback.thought,
+            elapsed, parseMethod: 'fallback_random', prompt, raw: rawResponse,
+            error: error || 'Failed to parse AI response',
+          });
           return {
             success: false,
             playerId,
@@ -355,7 +429,11 @@ async function handleAIDecisionBatch(req, res) {
 
         const decision = sanitizeDecision(parsed, gameState, playerId);
         console.log(`[${model}] Decision: ${decision.action} - ${decision.thought} (${elapsed}ms)`);
-
+        writeAILog({
+          round: gameState.round, playerId, model,
+          action: decision.action, thought: decision.thought,
+          elapsed, parseMethod, prompt, raw: rawResponse,
+        });
         return {
           success: true,
           playerId,

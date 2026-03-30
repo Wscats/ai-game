@@ -5,7 +5,7 @@ const CONST = {
   // Tank
   TANK_SIZE: 30,
   TANK_HP: 100,
-  MOVE_DISTANCE: 30,       // Pixels per move action
+  MOVE_DISTANCE: 30,       // Pixels per move action (base, on floor)
   ROTATE_DEGREES: 30,      // Degrees per rotate action
   BULLET_DAMAGE: 20,
 
@@ -33,4 +33,19 @@ const MAP_SIZES = {
   small: { width: 600, height: 400 },
   medium: { width: 800, height: 600 },
   large: { width: 1000, height: 700 },
+};
+
+/**
+ * Terrain types and their properties
+ * speedMult: movement distance multiplier (1.0 = normal 30px)
+ * passable:  false = cannot enter (like water)
+ * hidden:    true = tank is hidden from enemy (forest)
+ * color:     canvas fill color
+ * label:     display name
+ */
+const TERRAIN_TYPES = {
+  floor:  { speedMult: 1.0,  passable: true,  hidden: false, color: null,                    label: '地板' },
+  snow:   { speedMult: 0.6,  passable: true,  hidden: false, color: 'rgba(200,230,255,0.35)', label: '雪地' },
+  forest: { speedMult: 0.7,  passable: true,  hidden: true,  color: 'rgba(34,139,34,0.45)',   label: '森林' },
+  water:  { speedMult: 0.0,  passable: false, hidden: false, color: 'rgba(30,100,200,0.55)',   label: '河流' },
 };

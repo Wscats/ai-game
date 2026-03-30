@@ -180,6 +180,9 @@ class Game {
       { type: 'emp', weight: 1 },       // EMP: reset cooldowns
       { type: 'collapse', weight: 2 },  // Obstacle collapse
       { type: 'airstrike', weight: 1 }, // Airstrike: random area damage
+      { type: 'shield', weight: 2 },    // Shield: absorb next hit
+      { type: 'boost', weight: 2 },     // Speed boost: double move next 2 turns
+      { type: 'poison', weight: 1 },    // Poison cloud: linger damage zone
     ];
     const total = events.reduce((s, e) => s + e.weight, 0);
     let r = Math.random() * total;
@@ -243,6 +246,27 @@ class Game {
         this.renderer.addExplosion(ex, ey, 25);
         break;
       }
+      case 'shield': {
+        // Shield pickup: absorbs next hit
+        const event = { type: 'shield', x: ex, y: ey, radius: 20, active: true };
+        this.randomEvents.push(event);
+        this.log(`🛡️ 护盾道具出现在 (${Math.round(ex)}, ${Math.round(ey)})！拾取可抵挡下一次伤害`, 'system');
+        break;
+      }
+      case 'boost': {
+        // Speed boost pickup: double move distance for 2 turns
+        const event = { type: 'boost', x: ex, y: ey, radius: 20, active: true };
+        this.randomEvents.push(event);
+        this.log(`⚡ 加速道具出现在 (${Math.round(ex)}, ${Math.round(ey)})！拾取后2回合移动速度翻倍`, 'system');
+        break;
+      }
+      case 'poison': {
+        // Poison cloud: linger for 3 rounds, deal 8 dmg/round to tanks inside
+        const event = { type: 'poison', x: ex, y: ey, radius: 55, active: true, rounds: 3 };
+        this.randomEvents.push(event);
+        this.log(`☠️ 毒雾弥漫在 (${Math.round(ex)}, ${Math.round(ey)})！范围内每回合扣 8HP，持续 3 回合`, 'system');
+        break;
+      }
     }
     this.renderState();
   }
@@ -254,9 +278,21 @@ class Game {
     for (const event of this.randomEvents) {
       if (!event.active) continue;
       const dist = Math.sqrt((tank.x - event.x) ** 2 + (tank.y - event.y) ** 2);
+      const icon = tank.id === 'red' ? '🔴' : '🔵';
+
+      // Poison cloud: tick damage every time tank is inside (don't deactivate)
+      if (event.type === 'poison') {
+        if (dist <= event.radius) {
+          tank.takeDamage(8);
+          this.log(`☠️ ${icon} ${tank.name} 在毒雾中！(-8HP → ${tank.hp}HP)`, 'damage');
+          this.renderer.addExplosion(tank.x, tank.y, 10);
+          if (!tank.alive) { this.endGame(tank.id === 'red' ? 'blue' : 'red'); return true; }
+        }
+        continue; // poison handled separately, don't fall through
+      }
+
       if (dist <= event.radius + tank.size / 2) {
         event.active = false;
-        const icon = tank.id === 'red' ? '🔴' : '🔵';
         if (event.type === 'supply') {
           const heal = Math.min(30, tank.maxHp - tank.hp);
           tank.hp += heal;
@@ -267,10 +303,24 @@ class Game {
           this.log(`💣 ${icon} ${tank.name} 踩中地雷！(-25HP → ${tank.hp}HP)`, 'damage');
           this.renderer.addExplosion(tank.x, tank.y, 25);
           if (!tank.alive) { this.endGame(tank.id === 'red' ? 'blue' : 'red'); return true; }
+        } else if (event.type === 'shield') {
+          tank.shielded = true;
+          this.log(`🛡️ ${icon} ${tank.name} 获得护盾！下次受击免疫伤害`, tank.id);
+          this.renderer.addExplosion(tank.x, tank.y, 15);
+        } else if (event.type === 'boost') {
+          tank.boostTurns = 2;
+          this.log(`⚡ ${icon} ${tank.name} 获得加速！接下来 2 回合移动距离翻倍`, tank.id);
+          this.renderer.addExplosion(tank.x, tank.y, 15);
         }
       }
     }
-    // Clean up inactive events
+    // Clean up inactive pickup events; tick poison rounds
+    for (const event of this.randomEvents) {
+      if (event.type === 'poison' && event.active) {
+        event.rounds--;
+        if (event.rounds <= 0) event.active = false;
+      }
+    }
     this.randomEvents = this.randomEvents.filter(e => e.active);
     return false;
   }
@@ -288,12 +338,39 @@ class Game {
     switch (action) {
       case 'move_forward':
         const fwd = tank.moveForward(this.map);
-        actionDesc = fwd ? '前进' : '前进(被阻挡)';
+        if (fwd) {
+          const tInfo = TERRAIN_TYPES[tank.currentTerrain];
+          const tLabel = tInfo ? tInfo.label : '';
+          const tNote = tank.currentTerrain !== 'floor' ? ` [${tLabel}]` : '';
+          actionDesc = `前进${tNote}`;
+        } else {
+          // Check if blocked by water
+          const rad = tank.angle * Math.PI / 180;
+          const destT = this.map.getTerrainForRect(
+            tank.x + Math.cos(rad) * CONST.MOVE_DISTANCE,
+            tank.y + Math.sin(rad) * CONST.MOVE_DISTANCE,
+            tank.size, tank.size
+          );
+          actionDesc = destT === 'water' ? '前进(河流阻挡)' : '前进(被阻挡)';
+        }
         didMove = fwd;
         break;
       case 'move_backward':
         const bwd = tank.moveBackward(this.map);
-        actionDesc = bwd ? '后退' : '后退(被阻挡)';
+        if (bwd) {
+          const tInfo2 = TERRAIN_TYPES[tank.currentTerrain];
+          const tLabel2 = tInfo2 ? tInfo2.label : '';
+          const tNote2 = tank.currentTerrain !== 'floor' ? ` [${tLabel2}]` : '';
+          actionDesc = `后退${tNote2}`;
+        } else {
+          const rad2 = tank.angle * Math.PI / 180;
+          const destT2 = this.map.getTerrainForRect(
+            tank.x - Math.cos(rad2) * CONST.MOVE_DISTANCE,
+            tank.y - Math.sin(rad2) * CONST.MOVE_DISTANCE,
+            tank.size, tank.size
+          );
+          actionDesc = destT2 === 'water' ? '后退(河流阻挡)' : '后退(被阻挡)';
+        }
         didMove = bwd;
         break;
       case 'rotate_left':
@@ -339,14 +416,16 @@ class Game {
         break;
       case 'wait':
       default:
-        actionDesc = '等待';
+        // wait is not allowed; fall through to forced move below
+        actionDesc = '(等待→强制移动)';
         break;
     }
 
-    // ── Mandatory move rule: if tank didn't physically move, force a move ──
-    if (!didMove && action !== 'move_forward' && action !== 'move_backward') {
+    // ── Mandatory move rule: every turn must have physical movement ──
+    if (!didMove) {
       const forcedDesc = this.forceMoveAction(tank);
-      this.log(`⚠️ ${icon} ${tank.name} 未移动，强制执行：${forcedDesc}`, 'system');
+      this.log(`⚠️ ${icon} ${tank.name} 强制移动：${forcedDesc}`, 'system');
+      actionDesc = actionDesc ? `${actionDesc} + ${forcedDesc}` : forcedDesc;
       didMove = true;
     }
 
@@ -356,7 +435,9 @@ class Game {
       if (died) return;
     }
 
-    this.log(`${icon} ${tank.name}: ${actionDesc}`, playerId);
+    // Include thought in action log (≤50 chars)
+    const thoughtNote = decision.thought ? ` 💭${decision.thought.substring(0, 50)}` : '';
+    this.log(`${icon} ${tank.name}: ${actionDesc}${thoughtNote}`, playerId);
 
     // Record history
     this.history.push({
@@ -388,11 +469,14 @@ class Game {
         [playerId === 'red' ? 'blue' : 'red']: enemy.getState(),
       },
       obstacles: this.map.getState(),
+      terrain: this.map.getTerrainState(),
       bullets: [],
       distance: Math.round(me.distanceTo(enemy.x, enemy.y)),
       angleToEnemy: Math.round(angleToEnemy),
       angleDiff: Math.round(angleDiff),
       lineOfSight: this.map.hasLineOfSight(me.x, me.y, enemy.x, enemy.y),
+      myTerrain: me.currentTerrain,
+      enemyTerrain: enemy.currentTerrain,
       fieldEvents: this.randomEvents.filter(e => e.active).map(e => ({
         type: e.type, x: Math.round(e.x), y: Math.round(e.y),
       })),

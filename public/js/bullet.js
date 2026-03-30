@@ -73,19 +73,8 @@ class Bullet {
           map.damageObstacle(obs);
           return { hit: null, hitObstacle: obs, trail, finalX: nx, finalY: ny, destroyed: true };
         } else {
-          // Steel: reflect
-          bounces++;
-          if (bounces > CONST.BULLET_MAX_BOUNCES) {
-            return { hit: null, hitObstacle: obs, trail, finalX: nx, finalY: ny };
-          }
-          const ocx = obs.x + obs.width / 2, ocy = obs.y + obs.height / 2;
-          if (Math.abs(nx - ocx) / obs.width > Math.abs(ny - ocy) / obs.height) {
-            angle = 180 - angle;
-          } else {
-            angle = -angle;
-          }
-          angle = ((angle % 360) + 360) % 360;
-          continue;
+          // Steel: bullet stops (no reflection)
+          return { hit: null, hitObstacle: obs, trail, finalX: nx, finalY: ny, destroyed: false };
         }
       }
 

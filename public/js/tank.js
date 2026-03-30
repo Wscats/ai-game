@@ -18,21 +18,52 @@ class Tank {
     this.shotsHit = 0;
     this.damageDealt = 0;
     this.damageTaken = 0;
+    this.currentTerrain = 'floor'; // Track current terrain for UI/AI
+    this.shielded = false;          // Shield: absorb next hit
+    this.boostTurns = 0;            // Speed boost remaining turns
   }
+
+  /**
+   * Move forward; terrain affects actual distance.
+   * Returns false if blocked (water or obstacle), true if moved.
+   */
   moveForward(map) {
     const rad = this.angle * Math.PI / 180;
-    const nx = this.x + Math.cos(rad) * CONST.MOVE_DISTANCE;
-    const ny = this.y + Math.sin(rad) * CONST.MOVE_DISTANCE;
-    if (this._canMove(nx, ny, map)) { this.x = nx; this.y = ny; return true; }
-    return false;
+    return this._tryMove(map, rad, 1);
   }
+
   moveBackward(map) {
     const rad = this.angle * Math.PI / 180;
-    const nx = this.x - Math.cos(rad) * CONST.MOVE_DISTANCE;
-    const ny = this.y - Math.sin(rad) * CONST.MOVE_DISTANCE;
-    if (this._canMove(nx, ny, map)) { this.x = nx; this.y = ny; return true; }
+    return this._tryMove(map, rad, -1);
+  }
+
+  _tryMove(map, rad, dir) {
+    const baseDist = CONST.MOVE_DISTANCE;
+    // Check destination terrain first (use full step to detect water)
+    const fullNx = this.x + Math.cos(rad) * baseDist * dir;
+    const fullNy = this.y + Math.sin(rad) * baseDist * dir;
+    const destTerrain = map.getTerrainForRect(fullNx, fullNy, this.size, this.size);
+    const terrainInfo = TERRAIN_TYPES[destTerrain] || TERRAIN_TYPES.floor;
+
+    // Water is impassable
+    if (!terrainInfo.passable) return false;
+
+    // Apply speed multiplier + boost
+    const boostMult = this.boostTurns > 0 ? 2 : 1;
+    const dist = baseDist * terrainInfo.speedMult * boostMult;
+    if (this.boostTurns > 0) this.boostTurns--;
+    const nx = this.x + Math.cos(rad) * dist * dir;
+    const ny = this.y + Math.sin(rad) * dist * dir;
+
+    if (this._canMove(nx, ny, map)) {
+      this.x = nx;
+      this.y = ny;
+      this.currentTerrain = map.getTerrainForRect(nx, ny, this.size, this.size);
+      return true;
+    }
     return false;
   }
+
   rotateLeft() { this.angle = (this.angle - CONST.ROTATE_DEGREES + 360) % 360; }
   rotateRight() { this.angle = (this.angle + CONST.ROTATE_DEGREES) % 360; }
   canFire() { return this.cooldown <= 0 && this.alive; }
@@ -46,6 +77,10 @@ class Tank {
     return new Bullet(bx, by, this.angle, this.id);
   }
   takeDamage(amount) {
+    if (this.shielded) {
+      this.shielded = false;
+      return; // absorb hit
+    }
     this.hp -= amount;
     this.damageTaken += amount;
     if (this.hp <= 0) { this.hp = 0; this.alive = false; }
@@ -63,6 +98,8 @@ class Tank {
       x: Math.round(this.x), y: Math.round(this.y),
       angle: Math.round(this.angle), hp: this.hp, maxHp: this.maxHp,
       canFire: this.canFire(), alive: this.alive,
+      terrain: this.currentTerrain,
+      shielded: this.shielded, boostTurns: this.boostTurns,
     };
   }
 }
