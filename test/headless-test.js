@@ -1,9 +1,12 @@
 /**
  * headless-test.js
  * Headless browser test for AI Tank Battle using Puppeteer.
+ * Takes a screenshot after each round.
  * Usage: node test/headless-test.js [--visible] [--rounds=N] [--p1=model] [--p2=model]
  */
 const puppeteer = require('puppeteer');
+const fs = require('fs');
+const path = require('path');
 
 // ── CLI args ──────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -14,6 +17,9 @@ const P2_MODEL  = (args.find(a => a.startsWith('--p2=')) || '--p2=kimi-k2.5').sp
 const BASE_URL  = 'http://localhost:3000';
 const TIMEOUT   = 10 * 60 * 1000; // 10 min total
 
+// ── Screenshot directory ──────────────────────────────────────────────────────
+const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -23,9 +29,24 @@ function log(msg, level = 'INFO') {
   console.log(`${ts} ${prefix[level] || '[    ]'} ${msg}`);
 }
 
+function ensureScreenshotDir() {
+  if (!fs.existsSync(SCREENSHOT_DIR)) {
+    fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+    log(`Created screenshot directory: ${SCREENSHOT_DIR}`, 'OK');
+  } else {
+    // Clean up old screenshots
+    const files = fs.readdirSync(SCREENSHOT_DIR).filter(f => f.endsWith('.png'));
+    for (const f of files) {
+      fs.unlinkSync(path.join(SCREENSHOT_DIR, f));
+    }
+    log(`Cleaned ${files.length} old screenshots`, 'INFO');
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 (async () => {
   log(`Starting headless test  p1=${P1_MODEL}  p2=${P2_MODEL}  rounds=${ROUNDS}  visible=${VISIBLE}`);
+  ensureScreenshotDir();
 
   const browser = await puppeteer.launch({
     headless: !VISIBLE,
@@ -40,7 +61,6 @@ function log(msg, level = 'INFO') {
     const type = msg.type();
     if (type === 'error') log(`[Browser] ${msg.text()}`, 'ERR');
     else if (type === 'warn')  log(`[Browser] ${msg.text()}`, 'WARN');
-    // else log(`[Browser] ${msg.text()}`);
   });
   page.on('pageerror', err => log(`[PageError] ${err.message}`, 'ERR'));
 
@@ -63,7 +83,6 @@ function log(msg, level = 'INFO') {
     await page.evaluate((p1, p2) => {
       const s1 = document.getElementById('p1-model');
       const s2 = document.getElementById('p2-model');
-      // Try to select by value; if not found, keep default
       for (const opt of s1.options) { if (opt.value === p1) { s1.value = p1; break; } }
       for (const opt of s2.options) { if (opt.value === p2) { s2.value = p2; break; } }
     }, P1_MODEL, P2_MODEL);
@@ -96,8 +115,13 @@ function log(msg, level = 'INFO') {
     );
     log('Game screen active', 'OK');
 
-    // ── 5. Monitor game progress ──────────────────────────────────────────
-    log('Game started! Monitoring rounds...');
+    // Take initial screenshot (round 0 - game start)
+    const initScreenshot = path.join(SCREENSHOT_DIR, 'round-00-start.png');
+    await page.screenshot({ path: initScreenshot, fullPage: false });
+    log(`📸 Screenshot saved: round-00-start.png`, 'OK');
+
+    // ── 5. Monitor game progress & screenshot each round ──────────────────
+    log('Game started! Monitoring rounds & taking screenshots...');
     const startTime = Date.now();
     let lastRound = 0;
     let stuckCount = 0;
@@ -118,7 +142,7 @@ function log(msg, level = 'INFO') {
         break;
       }
 
-      // Read current round
+      // Read current round and game state
       const roundInfo = await page.evaluate(() => {
         const round = document.getElementById('round-num')?.textContent || '0';
         const maxRound = document.getElementById('max-round-num')?.textContent || '?';
@@ -132,7 +156,7 @@ function log(msg, level = 'INFO') {
       });
 
       const curRound = parseInt(roundInfo.round);
-      if (curRound !== lastRound) {
+      if (curRound !== lastRound && curRound > 0) {
         log(`Round ${roundInfo.round}/${roundInfo.maxRound}  🔴${roundInfo.p1hp}  🔵${roundInfo.p2hp}`, 'GAME');
         if (roundInfo.p1thought && roundInfo.p1thought !== '等待中...') {
           log(`  🔴 思考: ${roundInfo.p1thought}`);
@@ -140,6 +164,17 @@ function log(msg, level = 'INFO') {
         if (roundInfo.p2thought && roundInfo.p2thought !== '等待中...') {
           log(`  🔵 思考: ${roundInfo.p2thought}`);
         }
+
+        // Wait a moment for animations to complete before taking screenshot
+        await sleep(300);
+
+        // Take screenshot for this round
+        const roundStr = String(curRound).padStart(2, '0');
+        const screenshotFile = `round-${roundStr}.png`;
+        const screenshotPath = path.join(SCREENSHOT_DIR, screenshotFile);
+        await page.screenshot({ path: screenshotPath, fullPage: false });
+        log(`📸 Screenshot saved: ${screenshotFile}`, 'OK');
+
         lastRound = curRound;
         stuckCount = 0;
       } else {
@@ -167,10 +202,10 @@ function log(msg, level = 'INFO') {
     log(`Stats:  ${result.stats.replace(/\s+/g, ' ').trim()}`, 'OK');
     log('═══════════════════════════════════════', 'OK');
 
-    // ── 7. Screenshot ─────────────────────────────────────────────────────
-    const screenshotPath = `test/result-${Date.now()}.png`;
-    await page.screenshot({ path: screenshotPath, fullPage: false });
-    log(`Screenshot saved: ${screenshotPath}`, 'OK');
+    // ── 7. Final result screenshot ────────────────────────────────────────
+    const resultScreenshot = path.join(SCREENSHOT_DIR, 'result-final.png');
+    await page.screenshot({ path: resultScreenshot, fullPage: false });
+    log(`📸 Final result screenshot saved: result-final.png`, 'OK');
 
     // ── 8. Test replay button ─────────────────────────────────────────────
     log('Testing replay feature...');
@@ -188,6 +223,12 @@ function log(msg, level = 'INFO') {
           () => document.getElementById('replay-round-cur')?.textContent
         );
         log(`Replay at round: ${replayRound}`, 'GAME');
+
+        // Take replay screenshot
+        const replayScreenshot = path.join(SCREENSHOT_DIR, 'replay.png');
+        await page.screenshot({ path: replayScreenshot, fullPage: false });
+        log(`📸 Replay screenshot saved: replay.png`, 'OK');
+
         // Exit replay
         await page.click('#replay-exit');
         await sleep(500);
@@ -199,6 +240,9 @@ function log(msg, level = 'INFO') {
       log('Replay button not found', 'WARN');
     }
 
+    // ── 9. Summary ────────────────────────────────────────────────────────
+    const totalScreenshots = fs.readdirSync(SCREENSHOT_DIR).filter(f => f.endsWith('.png')).length;
+    log(`\n📁 All ${totalScreenshots} screenshots saved to: ${SCREENSHOT_DIR}`, 'OK');
     log('All tests passed ✓', 'OK');
 
   } catch (err) {
@@ -206,7 +250,7 @@ function log(msg, level = 'INFO') {
     console.error(err);
     // Screenshot on failure
     try {
-      const failPath = `test/fail-${Date.now()}.png`;
+      const failPath = path.join(SCREENSHOT_DIR, `fail-${Date.now()}.png`);
       await page.screenshot({ path: failPath });
       log(`Failure screenshot: ${failPath}`, 'WARN');
     } catch (_) {}
