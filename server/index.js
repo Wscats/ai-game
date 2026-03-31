@@ -57,16 +57,16 @@ const MIME = {
   '.svg': 'image/svg+xml',
 };
 
-// Available models
+// Available models (must match CodeBuddy CLI --model supported list)
 const MODELS = [
-  { id: 'deepseek-v3-2-volc', name: 'DeepSeek V3', icon: '🧠' },
-  { id: 'kimi-k2.5', name: 'Kimi K2.5', icon: '🌙' },
-  { id: 'hunyuan-2.0-thinking', name: '混元 2.0', icon: '🔥' },
-  { id: 'glm-5.0', name: 'GLM-5.0', icon: '🤖' },
-  { id: 'glm-4.7', name: 'GLM-4.7', icon: '⚡' },
-  { id: 'minimax-m2.7', name: 'MiniMax M2.7', icon: '🎯' },
-  { id: 'minimax-m2.5', name: 'MiniMax M2.5', icon: '💫' },
-  { id: 'glm-5.0-turbo', name: 'GLM-5.0 Turbo', icon: '🚀' },
+  { id: 'deepseek-v3-2-volc',    name: 'DeepSeek V3',      icon: '🧠' },
+  { id: 'kimi-k2.5',             name: 'Kimi K2.5',        icon: '🌙' },
+  { id: 'hunyuan-2.0-thinking',  name: '混元 2.0',          icon: '🔥' },
+  { id: 'glm-5.0',               name: 'GLM-5.0',          icon: '🤖' },
+  { id: 'glm-4.7',               name: 'GLM-4.7',          icon: '⚡' },
+  { id: 'minimax-m2.7',          name: 'MiniMax M2.7',     icon: '🎯' },
+  { id: 'minimax-m2.5',          name: 'MiniMax M2.5',     icon: '💫' },
+  { id: 'glm-5.0-turbo',         name: 'GLM-5.0 Turbo',   icon: '🚀' },
 ];
 
 // JSON Schema for structured AI output
@@ -75,7 +75,7 @@ const AI_DECISION_SCHEMA = JSON.stringify({
   properties: {
     action: {
       type: 'string',
-      enum: ['move_forward', 'move_backward', 'rotate_left', 'rotate_right', 'fire', 'wait'],
+      enum: ['move_forward', 'move_backward', 'rotate_left', 'rotate_right', 'fire'],
     },
     thought: {
       type: 'string',
@@ -204,7 +204,7 @@ function buildPrompt(gameState, playerId) {
 
   return `Tank battle game. You are ${playerId}.
 Map: ${gameState.mapWidth}x${gameState.mapHeight}, Round: ${gameState.round}/${gameState.maxRounds}
-YOU: pos(${me.x},${me.y}) angle=${me.angle}° HP=${me.hp}/${me.maxHp} canFire=${me.canFire} terrain=${myTerrain}
+YOU: pos(${me.x},${me.y}) angle=${me.angle}° HP=${me.hp}/${me.maxHp} ammo=${me.ammo} missiles=${me.missiles || 0} weaponLv=${me.weaponLevel || 0} canFire=${me.canFire} canFireMissile=${me.canFireMissile || false} terrain=${myTerrain}
 ENEMY: pos(${enemy.x},${enemy.y}) HP=${enemy.hp}/${enemy.maxHp} terrain=${enemyTerrain}
 Distance=${gameState.distance} AngleToEnemy=${gameState.angleToEnemy}° NeedRotate=${gameState.angleDiff > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(gameState.angleDiff).toFixed(0)}°
 LineOfSight=${gameState.lineOfSight ? 'CLEAR' : 'BLOCKED'}
@@ -213,10 +213,10 @@ Terrain: ${terrainPatches}
 TerrainRules: ${terrainRules}
 FieldEvents: ${gameState.fieldEvents && gameState.fieldEvents.length > 0 ? gameState.fieldEvents.map(e => `${e.type}@(${e.x},${e.y})`).join(', ') : 'None'}
 
-Actions: move_forward, move_backward, rotate_left(30°), rotate_right(30°), fire(if canFire)
-Rules: bullet=20dmg, brick walls DESTROYED by bullet, steel walls STOP bullet(no reflect). Forest hides you.
-Items: supply=+30HP, mine=-25HP, shield=absorb1hit, boost=2x speed 2turns, poison=cloud-8HP/round. Avoid water(impassable).
-IMPORTANT: NO waiting allowed - you MUST move every turn.
+Actions: move_forward, move_backward, rotate_left(30°), rotate_right(30°), fire(if canFire AND ammo>0), fire_missile(if canFireMissile AND missiles>0, penetrates buildings!)
+Rules: bullet=20dmg(+10/weaponLv), missile=35dmg(+10/weaponLv) PENETRATES buildings, brick walls DESTROYED by bullet, steel walls STOP bullet(no reflect). Forest hides you.
+Items: supply=+30HP, mine=-25HP, shield=absorb1hit, boost=2x speed 2turns, poison=cloud-8HP/round, ammo=+3bullets, missile=+1missile(penetrates buildings), weapon_upgrade=+dmg&range. Avoid water(impassable).
+IMPORTANT: NO waiting allowed - you MUST move every turn. If ammo=0 you CANNOT fire, pick up ammo item first. Use fire_missile when LineOfSight is BLOCKED to hit through buildings!
 
 Reply ONLY JSON: {"action":"chosen_action","thought":"brief Chinese reason <30chars"}`;
 }
@@ -225,17 +225,48 @@ Reply ONLY JSON: {"action":"chosen_action","thought":"brief Chinese reason <30ch
  * Sanitize and validate AI decision
  */
 function sanitizeDecision(parsed, gameState, playerId) {
-  const validActions = ['move_forward', 'move_backward', 'rotate_left', 'rotate_right', 'fire', 'wait'];
-  let action = parsed.action || 'wait';
+  const validActions = ['move_forward', 'move_backward', 'rotate_left', 'rotate_right', 'fire', 'fire_missile'];
+
+  // Normalize action: strip parentheses/params and lowercase, e.g. "rotate_right(30°)" → "rotate_right"
+  let action = (parsed.action || 'move_forward').toString().trim();
+  action = action.replace(/\s*\(.*\)/, '').toLowerCase();
+
+  // Also handle common aliases
+  const aliases = {
+    'forward': 'move_forward',
+    'move': 'move_forward',
+    'backward': 'move_backward',
+    'back': 'move_backward',
+    'left': 'rotate_left',
+    'turn_left': 'rotate_left',
+    'right': 'rotate_right',
+    'turn_right': 'rotate_right',
+    'shoot': 'fire',
+    'attack': 'fire',
+    'missile': 'fire_missile',
+    'launch_missile': 'fire_missile',
+  };
+  if (aliases[action]) action = aliases[action];
 
   if (!validActions.includes(action)) {
-    action = 'wait';
+    console.warn(`[sanitize] Unknown action "${parsed.action}" → fallback move_forward`);
+    action = 'move_forward';
   }
 
   // Can't fire if on cooldown
   const me = gameState.tanks[playerId];
   if (action === 'fire' && !me.canFire) {
-    action = 'wait';
+    action = 'move_forward';
+  }
+
+  // Can't fire missile if no missiles or on cooldown
+  if (action === 'fire_missile' && (!me.canFireMissile)) {
+    action = me.canFire ? 'fire' : 'move_forward';
+  }
+
+  // wait is not a valid action; replace with move_forward to preserve AI thought
+  if (action === 'wait') {
+    action = 'move_forward';
   }
 
   return {

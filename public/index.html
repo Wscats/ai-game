@@ -41,6 +41,36 @@
             <input type="text" id="p2-name" value="Kimi" placeholder="AI名称">
           </div>
         </div>
+
+        <div class="vs-divider"><span>VS</span></div>
+
+        <!-- Green Player -->
+        <div class="config-panel panel-green">
+          <h2>🟢 绿方</h2>
+          <div class="form-group">
+            <label>选择模型</label>
+            <select id="p3-model"></select>
+          </div>
+          <div class="form-group">
+            <label>显示名称</label>
+            <input type="text" id="p3-name" value="混元" placeholder="AI名称">
+          </div>
+        </div>
+
+        <div class="vs-divider"><span>VS</span></div>
+
+        <!-- Purple Player -->
+        <div class="config-panel panel-purple">
+          <h2>🟣 紫方</h2>
+          <div class="form-group">
+            <label>选择模型</label>
+            <select id="p4-model"></select>
+          </div>
+          <div class="form-group">
+            <label>显示名称</label>
+            <input type="text" id="p4-name" value="" placeholder="留空则不参战">
+          </div>
+        </div>
       </div>
 
       <!-- Game Settings -->
@@ -79,86 +109,178 @@
   <!-- ========== Game Screen ========== -->
   <div id="game-screen" class="screen">
     <div class="game-layout">
-      <!-- Left Panel: Red -->
-      <div class="side-panel panel-red-bg">
-        <div class="tank-info">
-          <div class="tank-avatar" id="g-p1-icon">🔴</div>
-          <div class="tank-name" id="g-p1-name">DeepSeek</div>
-          <div class="model-tag" id="g-p1-model">deepseek-v3</div>
-          <div class="tank-hp-bar"><div class="hp-fill hp-red" id="g-p1-hp" style="width:100%"></div></div>
-          <div class="tank-hp-text" id="g-p1-hp-text">HP: 100/100</div>
-          <div class="tank-stats">
-            <div>命中: <span id="g-p1-hits">0</span></div>
-            <div>开火: <span id="g-p1-shots">0</span></div>
-            <div>命中率: <span id="g-p1-accuracy">0%</span></div>
-          </div>
-        </div>
-        <div class="ai-thought">
-          <div class="thought-title">🧠 AI 思考</div>
-          <div class="thought-content" id="g-p1-thought">等待中...</div>
-        </div>
-        <div class="ai-detail">
-          <div class="thought-title">📊 AI 交互详情</div>
-          <div class="detail-content" id="g-p1-detail">
-            <span class="detail-placeholder">等待AI响应...</span>
-          </div>
-        </div>
-        <div class="action-history">
-          <div class="thought-title">📋 行动记录</div>
-          <div class="history-list" id="g-p1-history"></div>
+      <!-- Top: Game Header -->
+      <div class="game-header">
+        <span class="round-info">回合 <span id="round-num" class="round-num-big">0</span> / <span id="max-round-num">30</span></span>
+        <span class="turn-indicator" id="turn-indicator">准备中...</span>
+        <div class="game-controls">
+          <button id="btn-auto" class="btn btn-sm btn-active">▶ 自动</button>
+          <button id="btn-step" class="btn btn-sm">⏭ 单步</button>
+          <button id="btn-quit" class="btn btn-sm btn-danger">🚪 退出</button>
         </div>
       </div>
 
-      <!-- Center: Canvas -->
-      <div class="game-center">
-        <div class="game-header">
-          <span class="round-info">回合 <span id="round-num" class="round-num-big">0</span> / <span id="max-round-num">30</span></span>
-          <span class="turn-indicator" id="turn-indicator">准备中...</span>
-          <div class="game-controls">
-            <button id="btn-auto" class="btn btn-sm btn-active">▶ 自动</button>
-            <button id="btn-step" class="btn btn-sm">⏭ 单步</button>
-            <button id="btn-quit" class="btn btn-sm btn-danger">🚪 退出</button>
+      <!-- Compact Panels Row: All 4 players (stats only) -->
+      <div class="panels-row">
+        <!-- Red -->
+        <div class="side-panel panel-red-bg">
+          <div class="tank-info">
+            <div class="tank-avatar" id="g-p1-icon">🔴</div>
+            <div class="tank-name" id="g-p1-name">DeepSeek</div>
+            <div class="model-tag" id="g-p1-model">deepseek-v3</div>
+            <div class="tank-hp-bar"><div class="hp-fill hp-red" id="g-p1-hp" style="width:100%"></div></div>
+            <div class="tank-hp-text" id="g-p1-hp-text">HP: 100/100</div>
+            <div class="tank-stats">
+              <span>命中:<span id="g-p1-hits">0</span></span>
+              <span>开火:<span id="g-p1-shots">0</span></span>
+              <span>率:<span id="g-p1-accuracy">0%</span></span>
+              <span>🚀<span id="g-p1-missiles">0</span></span>
+              <span>⬆<span id="g-p1-weapon">Lv0</span></span>
+            </div>
           </div>
         </div>
-        <div class="canvas-wrapper">
-          <canvas id="game-canvas"></canvas>
-          <!-- Turn overlay -->
-          <div id="turn-overlay" class="turn-overlay" style="display:none">
-            <div class="turn-overlay-text" id="turn-overlay-text"></div>
+        <!-- Blue -->
+        <div class="side-panel panel-blue-bg">
+          <div class="tank-info">
+            <div class="tank-avatar" id="g-p2-icon">🔵</div>
+            <div class="tank-name" id="g-p2-name">Kimi</div>
+            <div class="model-tag" id="g-p2-model">kimi-k2.5</div>
+            <div class="tank-hp-bar"><div class="hp-fill hp-blue" id="g-p2-hp" style="width:100%"></div></div>
+            <div class="tank-hp-text" id="g-p2-hp-text">HP: 100/100</div>
+            <div class="tank-stats">
+              <span>命中:<span id="g-p2-hits">0</span></span>
+              <span>开火:<span id="g-p2-shots">0</span></span>
+              <span>率:<span id="g-p2-accuracy">0%</span></span>
+              <span>🚀<span id="g-p2-missiles">0</span></span>
+              <span>⬆<span id="g-p2-weapon">Lv0</span></span>
+            </div>
           </div>
         </div>
-        <div class="game-log-bar">
-          <div id="game-log" class="game-log-scroll"></div>
+        <!-- Green -->
+        <div class="side-panel panel-green-bg">
+          <div class="tank-info">
+            <div class="tank-avatar" id="g-p3-icon">🟢</div>
+            <div class="tank-name" id="g-p3-name">混元</div>
+            <div class="model-tag" id="g-p3-model">hunyuan</div>
+            <div class="tank-hp-bar"><div class="hp-fill hp-green" id="g-p3-hp" style="width:100%"></div></div>
+            <div class="tank-hp-text" id="g-p3-hp-text">HP: 100/100</div>
+            <div class="tank-stats">
+              <span>命中:<span id="g-p3-hits">0</span></span>
+              <span>开火:<span id="g-p3-shots">0</span></span>
+              <span>率:<span id="g-p3-accuracy">0%</span></span>
+              <span>🚀<span id="g-p3-missiles">0</span></span>
+              <span>⬆<span id="g-p3-weapon">Lv0</span></span>
+            </div>
+          </div>
+        </div>
+        <!-- Purple -->
+        <div class="side-panel panel-purple-bg">
+          <div class="tank-info">
+            <div class="tank-avatar" id="g-p4-icon">🟣</div>
+            <div class="tank-name" id="g-p4-name">紫方</div>
+            <div class="model-tag" id="g-p4-model">-</div>
+            <div class="tank-hp-bar"><div class="hp-fill hp-purple" id="g-p4-hp" style="width:100%"></div></div>
+            <div class="tank-hp-text" id="g-p4-hp-text">HP: 100/100</div>
+            <div class="tank-stats">
+              <span>命中:<span id="g-p4-hits">0</span></span>
+              <span>开火:<span id="g-p4-shots">0</span></span>
+              <span>率:<span id="g-p4-accuracy">0%</span></span>
+              <span>🚀<span id="g-p4-missiles">0</span></span>
+              <span>⬆<span id="g-p4-weapon">Lv0</span></span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Right Panel: Blue -->
-      <div class="side-panel panel-blue-bg">
-        <div class="tank-info">
-          <div class="tank-avatar" id="g-p2-icon">🔵</div>
-          <div class="tank-name" id="g-p2-name">Kimi</div>
-          <div class="model-tag" id="g-p2-model">kimi-k2.5</div>
-          <div class="tank-hp-bar"><div class="hp-fill hp-blue" id="g-p2-hp" style="width:100%"></div></div>
-          <div class="tank-hp-text" id="g-p2-hp-text">HP: 100/100</div>
-          <div class="tank-stats">
-            <div>命中: <span id="g-p2-hits">0</span></div>
-            <div>开火: <span id="g-p2-shots">0</span></div>
-            <div>命中率: <span id="g-p2-accuracy">0%</span></div>
+      <!-- Main area: Left intent panels + Canvas + Right intent panels -->
+      <div class="game-main">
+        <!-- Left side: Red & Blue intent -->
+        <div class="intent-column intent-left">
+          <div class="intent-panel intent-red">
+            <div class="intent-header">🔴 <span id="intent-p1-name">DeepSeek</span></div>
+            <div class="ai-thought">
+              <div class="thought-title">🧠 行动意图</div>
+              <div class="thought-content" id="g-p1-thought">等待中...</div>
+            </div>
+            <div class="ai-detail">
+              <div class="thought-title">📊 详情</div>
+              <div class="detail-content" id="g-p1-detail">
+                <span class="detail-placeholder">等待AI响应...</span>
+              </div>
+            </div>
+            <div class="action-history">
+              <div class="thought-title">📋 行动记录</div>
+              <div class="history-list" id="g-p1-history"></div>
+            </div>
+          </div>
+          <div class="intent-panel intent-blue">
+            <div class="intent-header">🔵 <span id="intent-p2-name">Kimi</span></div>
+            <div class="ai-thought">
+              <div class="thought-title">🧠 行动意图</div>
+              <div class="thought-content" id="g-p2-thought">等待中...</div>
+            </div>
+            <div class="ai-detail">
+              <div class="thought-title">📊 详情</div>
+              <div class="detail-content" id="g-p2-detail">
+                <span class="detail-placeholder">等待AI响应...</span>
+              </div>
+            </div>
+            <div class="action-history">
+              <div class="thought-title">📋 行动记录</div>
+              <div class="history-list" id="g-p2-history"></div>
+            </div>
           </div>
         </div>
-        <div class="ai-thought">
-          <div class="thought-title">🧠 AI 思考</div>
-          <div class="thought-content" id="g-p2-thought">等待中...</div>
-        </div>
-        <div class="ai-detail">
-          <div class="thought-title">📊 AI 交互详情</div>
-          <div class="detail-content" id="g-p2-detail">
-            <span class="detail-placeholder">等待AI响应...</span>
+
+        <!-- Center: Canvas area -->
+        <div class="game-center">
+          <div class="canvas-wrapper">
+            <canvas id="game-canvas"></canvas>
+            <div id="turn-overlay" class="turn-overlay" style="display:none">
+              <div class="turn-overlay-text" id="turn-overlay-text"></div>
+            </div>
+          </div>
+          <div class="game-log-bar">
+            <div id="game-log" class="game-log-scroll"></div>
           </div>
         </div>
-        <div class="action-history">
-          <div class="thought-title">📋 行动记录</div>
-          <div class="history-list" id="g-p2-history"></div>
+
+        <!-- Right side: Green & Purple intent -->
+        <div class="intent-column intent-right">
+          <div class="intent-panel intent-green">
+            <div class="intent-header">🟢 <span id="intent-p3-name">混元</span></div>
+            <div class="ai-thought">
+              <div class="thought-title">🧠 行动意图</div>
+              <div class="thought-content" id="g-p3-thought">等待中...</div>
+            </div>
+            <div class="ai-detail">
+              <div class="thought-title">📊 详情</div>
+              <div class="detail-content" id="g-p3-detail">
+                <span class="detail-placeholder">等待AI响应...</span>
+              </div>
+            </div>
+            <div class="action-history">
+              <div class="thought-title">📋 行动记录</div>
+              <div class="history-list" id="g-p3-history"></div>
+            </div>
+          </div>
+          <div class="intent-panel intent-purple">
+            <div class="intent-header">🟣 <span id="intent-p4-name">紫方</span></div>
+            <div class="ai-thought">
+              <div class="thought-title">🧠 行动意图</div>
+              <div class="thought-content" id="g-p4-thought">等待中...</div>
+            </div>
+            <div class="ai-detail">
+              <div class="thought-title">📊 详情</div>
+              <div class="detail-content" id="g-p4-detail">
+                <span class="detail-placeholder">等待AI响应...</span>
+              </div>
+            </div>
+            <div class="action-history">
+              <div class="thought-title">📋 行动记录</div>
+              <div class="history-list" id="g-p4-history"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -171,9 +293,79 @@
       <div id="result-winner" class="result-winner"></div>
       <div class="result-replay" id="result-replay"></div>
       <div class="result-stats" id="result-stats"></div>
+      <div id="result-third" class="result-third" style="display:none"></div>
       <div class="result-buttons">
+        <button id="btn-replay" class="btn btn-replay">▶ 回放对战</button>
         <button id="btn-rematch" class="btn btn-start">🔄 再来一局</button>
         <button id="btn-back" class="btn btn-secondary">🏠 返回配置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Replay Screen ========== -->
+  <div id="replay-screen" class="screen">
+    <div class="replay-layout">
+      <!-- Replay Header -->
+      <div class="replay-header">
+        <div class="replay-title">🎬 对战回放</div>
+        <div class="replay-round-info">
+          回合 <span id="replay-round-cur" class="replay-round-num">0</span> / <span id="replay-round-total">0</span>
+        </div>
+        <div class="replay-controls">
+          <button id="replay-prev" class="btn btn-sm">⏮ 上一回合</button>
+          <button id="replay-play" class="btn btn-sm btn-active">▶ 播放</button>
+          <button id="replay-next" class="btn btn-sm">⏭ 下一回合</button>
+          <select id="replay-speed" class="replay-speed-select">
+            <option value="2000">慢速 (2s)</option>
+            <option value="1000" selected>正常 (1s)</option>
+            <option value="500">快速 (0.5s)</option>
+            <option value="200">极速 (0.2s)</option>
+          </select>
+          <button id="replay-exit" class="btn btn-sm btn-danger">✕ 退出回放</button>
+        </div>
+      </div>
+
+      <!-- Replay Body -->
+      <div class="replay-body">
+        <!-- Left: Red info -->
+        <div class="replay-side replay-side-red">
+          <div class="replay-tank-name" id="replay-p1-name">红方</div>
+          <div class="replay-hp-bar"><div class="hp-fill hp-red" id="replay-p1-hp" style="width:100%"></div></div>
+          <div class="replay-hp-text" id="replay-p1-hp-text">HP: 100/100</div>
+          <div class="replay-action-log" id="replay-p1-log"></div>
+        </div>
+
+        <!-- Center: Canvas -->
+        <div class="replay-canvas-wrap">
+          <canvas id="replay-canvas"></canvas>
+          <div class="replay-progress-bar">
+            <div id="replay-progress-fill" class="replay-progress-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Right: Blue info -->
+        <div class="replay-side replay-side-blue">
+          <div class="replay-tank-name" id="replay-p2-name">蓝方</div>
+          <div class="replay-hp-bar"><div class="hp-fill hp-blue" id="replay-p2-hp" style="width:100%"></div></div>
+          <div class="replay-hp-text" id="replay-p2-hp-text">HP: 100/100</div>
+          <div class="replay-action-log" id="replay-p2-log"></div>
+        </div>
+
+        <!-- Far Right: Green info -->
+        <div class="replay-side replay-side-green" id="replay-p3-panel" style="display:none">
+          <div class="replay-tank-name" id="replay-p3-name">绿方</div>
+          <div class="replay-hp-bar"><div class="hp-fill hp-green" id="replay-p3-hp" style="width:100%"></div></div>
+          <div class="replay-hp-text" id="replay-p3-hp-text">HP: 100/100</div>
+          <div class="replay-action-log" id="replay-p3-log"></div>
+        </div>
+
+        <!-- Extra Right: Purple info -->
+        <div class="replay-side replay-side-purple" id="replay-p4-panel" style="display:none">
+          <div class="replay-tank-name" id="replay-p4-name">紫方</div>
+          <div class="replay-hp-bar"><div class="hp-fill hp-purple" id="replay-p4-hp" style="width:100%"></div></div>
+          <div class="replay-hp-text" id="replay-p4-hp-text">HP: 100/100</div>
+          <div class="replay-action-log" id="replay-p4-log"></div>
+        </div>
       </div>
     </div>
   </div>

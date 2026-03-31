@@ -21,6 +21,9 @@ class Tank {
     this.currentTerrain = 'floor'; // Track current terrain for UI/AI
     this.shielded = false;          // Shield: absorb next hit
     this.boostTurns = 0;            // Speed boost remaining turns
+    this.ammo = CONST.TANK_INIT_AMMO; // Ammo count
+    this.missiles = 0;              // Missile count (penetrates buildings)
+    this.weaponLevel = 0;           // Weapon upgrade level (0=base, each +1 = +10dmg, +2 radius)
   }
 
   /**
@@ -66,15 +69,35 @@ class Tank {
 
   rotateLeft() { this.angle = (this.angle - CONST.ROTATE_DEGREES + 360) % 360; }
   rotateRight() { this.angle = (this.angle + CONST.ROTATE_DEGREES) % 360; }
-  canFire() { return this.cooldown <= 0 && this.alive; }
+  canFire() { return this.cooldown <= 0 && this.alive && this.ammo > 0; }
+  canFireMissile() { return this.cooldown <= 0 && this.alive && this.missiles > 0; }
   fire() {
     if (!this.canFire()) return null;
     this.cooldown = 2;
+    this.ammo--;
     this.shotsFired++;
     const rad = this.angle * Math.PI / 180;
     const bx = this.x + Math.cos(rad) * (this.size / 2 + 5);
     const by = this.y + Math.sin(rad) * (this.size / 2 + 5);
-    return new Bullet(bx, by, this.angle, this.id);
+    const b = new Bullet(bx, by, this.angle, this.id);
+    // Apply weapon upgrade: +10 damage and +2 radius per level
+    b.damage += this.weaponLevel * 10;
+    b.radius += this.weaponLevel * 2;
+    return b;
+  }
+  fireMissile() {
+    if (!this.canFireMissile()) return null;
+    this.cooldown = 3; // Missile has longer cooldown
+    this.missiles--;
+    this.shotsFired++;
+    const rad = this.angle * Math.PI / 180;
+    const bx = this.x + Math.cos(rad) * (this.size / 2 + 5);
+    const by = this.y + Math.sin(rad) * (this.size / 2 + 5);
+    const m = new Bullet(bx, by, this.angle, this.id);
+    m.isMissile = true;
+    m.damage = 35 + this.weaponLevel * 10; // Missile base damage is higher
+    m.radius = 5 + this.weaponLevel * 2;
+    return m;
   }
   takeDamage(amount) {
     if (this.shielded) {
@@ -99,7 +122,9 @@ class Tank {
       angle: Math.round(this.angle), hp: this.hp, maxHp: this.maxHp,
       canFire: this.canFire(), alive: this.alive,
       terrain: this.currentTerrain,
-      shielded: this.shielded, boostTurns: this.boostTurns,
+      shielded: this.shielded, boostTurns: this.boostTurns, ammo: this.ammo,
+      missiles: this.missiles, weaponLevel: this.weaponLevel,
+      canFireMissile: this.canFireMissile(),
     };
   }
 }

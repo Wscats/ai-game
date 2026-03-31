@@ -72,6 +72,8 @@ class GameMap {
         for (const e of this.obstacles) { if (this._ov(obs, e, 20)) { ok = false; break; } }
         if (this._ov(obs, {x:0,y:0,width:100,height:100}, 10)) ok = false;
         if (this._ov(obs, {x:this.width-100,y:this.height-100,width:100,height:100}, 10)) ok = false;
+        if (this._ov(obs, {x:this.width-100,y:0,width:100,height:100}, 10)) ok = false;
+        if (this._ov(obs, {x:0,y:this.height-100,width:100,height:100}, 10)) ok = false;
         if (ok) { this.obstacles.push(obs); break; }
         att++;
       }

@@ -1,0 +1,5 @@
+node_modules/
+logs/
+test/result-*.png
+test/fail-*.png
+.DS_Store

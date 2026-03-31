@@ -10,7 +10,15 @@ class Renderer {
     this.animating = false;
   }
 
-  resize(w, h) { this.canvas.width = w; this.canvas.height = h; }
+  resize(w, h) {
+    this.canvas.width = w;
+    this.canvas.height = h;
+    // Let CSS handle display scaling within the container
+    this.canvas.style.maxWidth = '100%';
+    this.canvas.style.maxHeight = '100%';
+    this.canvas.style.width = 'auto';
+    this.canvas.style.height = 'auto';
+  }
 
   render(state) {
     const { map, tanks, events } = state;
@@ -223,8 +231,112 @@ class Renderer {
           ctx.textBaseline = 'middle';
           ctx.fillText('☠️', 0, 0);
           ctx.restore();
+        } else if (ev.type === 'ammo') {
+          // Orange ammo pack
+          ctx.save();
+          ctx.translate(ev.x, ev.y);
+          ctx.shadowColor = `rgba(230,126,34,${pulse})`;
+          ctx.shadowBlur = 14;
+          ctx.fillStyle = `rgba(230,126,34,${0.85 * pulse})`;
+          ctx.fillRect(-12, -12, 24, 24);
+          ctx.strokeStyle = '#e67e22';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-12, -12, 24, 24);
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🔫', 0, 1);
+          ctx.restore();
+        } else if (ev.type === 'missile') {
+          // Red-orange missile pickup
+          ctx.save();
+          ctx.translate(ev.x, ev.y);
+          ctx.shadowColor = `rgba(255,69,0,${pulse})`;
+          ctx.shadowBlur = 16;
+          ctx.beginPath();
+          ctx.arc(0, 0, 14, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,69,0,${0.85 * pulse})`;
+          ctx.fill();
+          ctx.strokeStyle = '#ff4500';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 15px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🚀', 0, 1);
+          ctx.restore();
+        } else if (ev.type === 'weapon_upgrade') {
+          // Golden weapon upgrade pickup
+          ctx.save();
+          ctx.translate(ev.x, ev.y);
+          ctx.shadowColor = `rgba(255,215,0,${pulse})`;
+          ctx.shadowBlur = 18;
+          // Diamond shape
+          ctx.beginPath();
+          ctx.moveTo(0, -15);
+          ctx.lineTo(13, 0);
+          ctx.lineTo(0, 15);
+          ctx.lineTo(-13, 0);
+          ctx.closePath();
+          ctx.fillStyle = `rgba(255,215,0,${0.9 * pulse})`;
+          ctx.fill();
+          ctx.strokeStyle = '#ffd700';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('⬆', 0, 0);
+          ctx.restore();
         }
       }
+    }
+
+    // Tank movement trails (for replay)
+    if (state.redTrail && state.redTrail.length > 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(state.redTrail[0].x, state.redTrail[0].y);
+      for (let i = 1; i < state.redTrail.length; i++) {
+        ctx.lineTo(state.redTrail[i].x, state.redTrail[i].y);
+      }
+      ctx.strokeStyle = 'rgba(231,76,60,0.45)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Draw dots at each waypoint
+      for (let i = 0; i < state.redTrail.length - 1; i++) {
+        ctx.beginPath();
+        ctx.arc(state.redTrail[i].x, state.redTrail[i].y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(231,76,60,0.5)';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    if (state.blueTrail && state.blueTrail.length > 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(state.blueTrail[0].x, state.blueTrail[0].y);
+      for (let i = 1; i < state.blueTrail.length; i++) {
+        ctx.lineTo(state.blueTrail[i].x, state.blueTrail[i].y);
+      }
+      ctx.strokeStyle = 'rgba(52,152,219,0.45)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Draw dots at each waypoint
+      for (let i = 0; i < state.blueTrail.length - 1; i++) {
+        ctx.beginPath();
+        ctx.arc(state.blueTrail[i].x, state.blueTrail[i].y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(52,152,219,0.5)';
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     // Bullet trails
@@ -235,7 +347,10 @@ class Renderer {
       for (let i = 1; i < bt.trail.length; i++) {
         ctx.lineTo(bt.trail[i].x, bt.trail[i].y);
       }
-      ctx.strokeStyle = bt.owner === 'red' ? 'rgba(255,107,107,0.5)' : 'rgba(116,185,255,0.5)';
+      ctx.strokeStyle = bt.owner === 'red' ? 'rgba(255,107,107,0.5)'
+                      : bt.owner === 'blue' ? 'rgba(116,185,255,0.5)'
+                      : bt.owner === 'green' ? 'rgba(88,255,160,0.5)'
+                      : 'rgba(200,140,255,0.5)';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
       ctx.stroke();
@@ -245,7 +360,10 @@ class Renderer {
       const last = bt.trail[bt.trail.length - 1];
       ctx.beginPath();
       ctx.arc(last.x, last.y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = bt.owner === 'red' ? CONST.COLOR_BULLET_RED : CONST.COLOR_BULLET_BLUE;
+      ctx.fillStyle = bt.owner === 'red' ? CONST.COLOR_BULLET_RED
+                    : bt.owner === 'blue' ? CONST.COLOR_BULLET_BLUE
+                    : bt.owner === 'green' ? CONST.COLOR_GREEN
+                    : CONST.COLOR_PURPLE;
       ctx.fill();
     }
 
@@ -291,6 +409,16 @@ class Renderer {
         ctx.stroke();
         ctx.setLineDash([]);
       }
+      // Weapon upgrade aura (golden glow per level)
+      if (tank.weaponLevel > 0) {
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(tank.x, tank.y, tank.size / 2 + 3, 0, Math.PI * 2);
+        const wPulse = 0.4 + 0.3 * Math.sin(Date.now() / 250);
+        ctx.strokeStyle = `rgba(255,215,0,${wPulse * Math.min(tank.weaponLevel, 3) / 3})`;
+        ctx.lineWidth = 1 + tank.weaponLevel;
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -305,16 +433,24 @@ class Renderer {
     ctx.translate(tank.x, tank.y);
     ctx.rotate(tank.angle * Math.PI / 180);
     const s = tank.size / 2;
-    const isRed = tank.id === 'red';
+
+    // Determine colors by player id
+    const colorMap = {
+      red:    { dark: CONST.COLOR_RED_DARK,    main: CONST.COLOR_RED,    barrel: '#ff8888' },
+      blue:   { dark: CONST.COLOR_BLUE_DARK,   main: CONST.COLOR_BLUE,   barrel: '#88bbff' },
+      green:  { dark: CONST.COLOR_GREEN_DARK,  main: CONST.COLOR_GREEN,  barrel: '#88ffaa' },
+      purple: { dark: CONST.COLOR_PURPLE_DARK, main: CONST.COLOR_PURPLE, barrel: '#cc88ff' },
+    };
+    const colors = colorMap[tank.id] || colorMap.blue;
 
     // Body
-    ctx.fillStyle = isRed ? CONST.COLOR_RED_DARK : CONST.COLOR_BLUE_DARK;
+    ctx.fillStyle = colors.dark;
     ctx.fillRect(-s, -s * 0.7, s * 2, s * 1.4);
     // Turret
-    ctx.fillStyle = isRed ? CONST.COLOR_RED : CONST.COLOR_BLUE;
+    ctx.fillStyle = colors.main;
     ctx.beginPath(); ctx.arc(0, 0, s * 0.55, 0, Math.PI * 2); ctx.fill();
     // Barrel
-    ctx.fillStyle = isRed ? '#ff8888' : '#88bbff';
+    ctx.fillStyle = colors.barrel;
     ctx.fillRect(0, -3, s + 5, 6);
     ctx.fillStyle = '#ddd';
     ctx.fillRect(s + 2, -4, 5, 8);
@@ -333,12 +469,34 @@ class Renderer {
     ctx.fillStyle = hpR < 0.3 ? '#e74c3c' : hpR < 0.6 ? '#f39c12' : '#2ecc71';
     ctx.fillRect(barX, barY, barW * hpR, barH);
 
+    // Ammo count
+    if (tank.ammo !== undefined) {
+      ctx.fillStyle = tank.ammo <= 0 ? '#e74c3c' : tank.ammo <= 1 ? '#f39c12' : '#f1c40f';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      let ammoStr = '🔫'.repeat(Math.min(tank.ammo, 5)) || '∅';
+      if (tank.missiles > 0) ammoStr += ' 🚀' + tank.missiles;
+      ctx.fillText(ammoStr, tank.x, barY - 1);
+    }
+
+    // Weapon level indicator
+    if (tank.weaponLevel > 0) {
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 8px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(`⬆Lv${tank.weaponLevel}`, tank.x, barY - (tank.ammo !== undefined ? 11 : 1));
+    }
+
     // Name
-    ctx.fillStyle = isRed ? CONST.COLOR_RED : CONST.COLOR_BLUE;
+    ctx.fillStyle = colors.main;
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(tank.name, tank.x, barY - 3);
+    const nameOffset = tank.ammo !== undefined ? 11 : 3;
+    const extraOffset = tank.weaponLevel > 0 ? 10 : 0;
+    ctx.fillText(tank.name, tank.x, barY - nameOffset - extraOffset);
   }
 
   addBulletTrail(trail, owner) {

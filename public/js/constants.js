@@ -5,6 +5,7 @@ const CONST = {
   // Tank
   TANK_SIZE: 30,
   TANK_HP: 100,
+  TANK_INIT_AMMO: 3,       // Initial ammo count per tank
   MOVE_DISTANCE: 30,       // Pixels per move action (base, on floor)
   ROTATE_DEGREES: 30,      // Degrees per rotate action
   BULLET_DAMAGE: 20,
@@ -20,6 +21,10 @@ const CONST = {
   COLOR_RED_DARK: '#c0392b',
   COLOR_BLUE: '#3498db',
   COLOR_BLUE_DARK: '#2980b9',
+  COLOR_GREEN: '#2ecc71',
+  COLOR_GREEN_DARK: '#27ae60',
+  COLOR_PURPLE: '#9b59b6',
+  COLOR_PURPLE_DARK: '#7d3c98',
   COLOR_GROUND: '#1a1a2e',
   COLOR_GRID: 'rgba(255,255,255,0.03)',
   COLOR_BULLET_RED: '#ff6b6b',

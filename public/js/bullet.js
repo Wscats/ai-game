@@ -14,6 +14,7 @@ class Bullet {
     this.alive = true;
     this.trail = [{ x, y }];
     this.bounces = 0;
+    this.isMissile = false; // Missiles penetrate buildings
   }
 
   /**
@@ -21,6 +22,9 @@ class Bullet {
    * Returns: { hit: Tank|null, hitObstacle: obs|null, trail: [{x,y}...], finalX, finalY }
    */
   simulate(map, tanks) {
+    // Missiles use a special simulation that ignores obstacles
+    if (this.isMissile) return this._simulateMissile(map, tanks);
+
     let cx = this.x, cy = this.y;
     let angle = this.angle;
     let bounces = 0;
@@ -85,5 +89,46 @@ class Bullet {
 
     trail.push({ x: cx, y: cy });
     return { hit: null, hitObstacle: null, trail, finalX: cx, finalY: cy };
+  }
+
+  /**
+   * Missile simulation: flies straight, ignores obstacles (penetrates buildings),
+   * only stops when hitting a tank or going out of bounds.
+   */
+  _simulateMissile(map, tanks) {
+    let cx = this.x, cy = this.y;
+    const angle = this.angle;
+    const trail = [{ x: cx, y: cy }];
+    const rad = angle * Math.PI / 180;
+    const dx = Math.cos(rad) * this.speed;
+    const dy = Math.sin(rad) * this.speed;
+
+    for (let step = 0; step < CONST.BULLET_MAX_STEPS * 1.5; step++) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+
+      // Check tank hit
+      for (const tank of tanks) {
+        if (!tank.alive || tank.id === this.ownerId) continue;
+        const dist = Math.sqrt((nx - tank.x) ** 2 + (ny - tank.y) ** 2);
+        if (dist < this.radius + tank.size / 2) {
+          trail.push({ x: nx, y: ny });
+          return { hit: tank, hitObstacle: null, trail, finalX: nx, finalY: ny, isMissile: true };
+        }
+      }
+
+      // Out of bounds: missile disappears
+      if (nx < 0 || nx > map.width || ny < 0 || ny > map.height) {
+        trail.push({ x: nx, y: ny });
+        return { hit: null, hitObstacle: null, trail, finalX: nx, finalY: ny, isMissile: true };
+      }
+
+      cx = nx;
+      cy = ny;
+      if (step % 3 === 0) trail.push({ x: cx, y: cy });
+    }
+
+    trail.push({ x: cx, y: cy });
+    return { hit: null, hitObstacle: null, trail, finalX: cx, finalY: cy, isMissile: true };
   }
 }
