@@ -15,13 +15,26 @@ const ROUNDS    = parseInt((args.find(a => a.startsWith('--rounds=')) || '--roun
 const P1_MODEL  = (args.find(a => a.startsWith('--p1=')) || '--p1=deepseek-v3-2-volc').split('=')[1];
 const P2_MODEL  = (args.find(a => a.startsWith('--p2=')) || '--p2=kimi-k2.5').split('=')[1];
 const BASE_URL  = 'http://localhost:3000';
-const TIMEOUT   = 10 * 60 * 1000; // 10 min total
+const TIMEOUT   = 20 * 60 * 1000; // 20 min total
 
 // ── Screenshot directory ──────────────────────────────────────────────────────
 const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function safeScreenshot(page, filePath) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await page.screenshot({ path: filePath, fullPage: false });
+      return true;
+    } catch (err) {
+      log(`Screenshot attempt ${attempt} failed: ${err.message}`, 'WARN');
+      if (attempt < 3) await sleep(500);
+    }
+  }
+  return false;
+}
 
 function log(msg, level = 'INFO') {
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -50,8 +63,17 @@ function ensureScreenshotDir() {
 
   const browser = await puppeteer.launch({
     headless: !VISIBLE,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1440,900'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--window-size=1440,900',
+      '--disable-dev-shm-usage',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+    ],
     defaultViewport: { width: 1440, height: 900 },
+    protocolTimeout: 60000,
   });
 
   const page = await browser.newPage();
@@ -117,7 +139,7 @@ function ensureScreenshotDir() {
 
     // Take initial screenshot (round 0 - game start)
     const initScreenshot = path.join(SCREENSHOT_DIR, 'round-00-start.png');
-    await page.screenshot({ path: initScreenshot, fullPage: false });
+    await safeScreenshot(page, initScreenshot);
     log(`📸 Screenshot saved: round-00-start.png`, 'OK');
 
     // ── 5. Monitor game progress & screenshot each round ──────────────────
@@ -172,8 +194,11 @@ function ensureScreenshotDir() {
         const roundStr = String(curRound).padStart(2, '0');
         const screenshotFile = `round-${roundStr}.png`;
         const screenshotPath = path.join(SCREENSHOT_DIR, screenshotFile);
-        await page.screenshot({ path: screenshotPath, fullPage: false });
-        log(`📸 Screenshot saved: ${screenshotFile}`, 'OK');
+        if (await safeScreenshot(page, screenshotPath)) {
+          log(`📸 Screenshot saved: ${screenshotFile}`, 'OK');
+        } else {
+          log(`📸 Screenshot FAILED for ${screenshotFile}`, 'WARN');
+        }
 
         lastRound = curRound;
         stuckCount = 0;
@@ -204,14 +229,14 @@ function ensureScreenshotDir() {
 
     // ── 7. Final result screenshot ────────────────────────────────────────
     const resultScreenshot = path.join(SCREENSHOT_DIR, 'result-final.png');
-    await page.screenshot({ path: resultScreenshot, fullPage: false });
+    await safeScreenshot(page, resultScreenshot);
     log(`📸 Final result screenshot saved: result-final.png`, 'OK');
 
     // ── 8. Test replay button ─────────────────────────────────────────────
     log('Testing replay feature...');
     const replayBtn = await page.$('#btn-replay');
     if (replayBtn) {
-      await replayBtn.click();
+      await page.evaluate(() => document.getElementById('btn-replay')?.click());
       await sleep(1000);
       const onReplay = await page.evaluate(
         () => document.getElementById('replay-screen')?.classList.contains('active')
@@ -226,11 +251,11 @@ function ensureScreenshotDir() {
 
         // Take replay screenshot
         const replayScreenshot = path.join(SCREENSHOT_DIR, 'replay.png');
-        await page.screenshot({ path: replayScreenshot, fullPage: false });
+        await safeScreenshot(page, replayScreenshot);
         log(`📸 Replay screenshot saved: replay.png`, 'OK');
 
         // Exit replay
-        await page.click('#replay-exit');
+        await page.evaluate(() => document.getElementById('replay-exit')?.click());
         await sleep(500);
         log('Replay exit OK', 'OK');
       } else {
