@@ -22,8 +22,9 @@ class Tank {
     this.shielded = false;          // Shield: absorb next hit
     this.boostTurns = 0;            // Speed boost remaining turns
     this.ammo = CONST.TANK_INIT_AMMO; // Ammo count
-    this.missiles = 0;              // Missile count (penetrates buildings)
-    this.weaponLevel = 0;           // Weapon upgrade level (0=base, each +1 = +10dmg, +2 radius)
+    this.missiles = CONST.TANK_INIT_MISSILES; // Missile count (penetrates buildings)
+    this.weaponLevel = 0;           // Weapon upgrade level (0=base, each +1 = damage doubles)
+    this.roundsSinceLastFire = 0;   // Rounds since last fire (for forced fire rule)
   }
 
   /**
@@ -73,29 +74,32 @@ class Tank {
   canFireMissile() { return this.cooldown <= 0 && this.alive && this.missiles > 0; }
   fire() {
     if (!this.canFire()) return null;
-    this.cooldown = 2;
+    this.cooldown = CONST.FIRE_COOLDOWN;
     this.ammo--;
     this.shotsFired++;
+    this.roundsSinceLastFire = 0; // Reset forced fire counter
     const rad = this.angle * Math.PI / 180;
     const bx = this.x + Math.cos(rad) * (this.size / 2 + 5);
     const by = this.y + Math.sin(rad) * (this.size / 2 + 5);
     const b = new Bullet(bx, by, this.angle, this.id);
-    // Apply weapon upgrade: +10 damage and +2 radius per level
-    b.damage += this.weaponLevel * 10;
+    // Apply weapon upgrade: damage doubles per level
+    b.damage = CONST.BULLET_DAMAGE * Math.pow(2, this.weaponLevel);
     b.radius += this.weaponLevel * 2;
     return b;
   }
   fireMissile() {
     if (!this.canFireMissile()) return null;
-    this.cooldown = 3; // Missile has longer cooldown
+    this.cooldown = CONST.MISSILE_COOLDOWN;
     this.missiles--;
     this.shotsFired++;
+    this.roundsSinceLastFire = 0; // Reset forced fire counter
     const rad = this.angle * Math.PI / 180;
     const bx = this.x + Math.cos(rad) * (this.size / 2 + 5);
     const by = this.y + Math.sin(rad) * (this.size / 2 + 5);
     const m = new Bullet(bx, by, this.angle, this.id);
     m.isMissile = true;
-    m.damage = 35 + this.weaponLevel * 10; // Missile base damage is higher
+    // Apply weapon upgrade: damage doubles per level
+    m.damage = CONST.MISSILE_DAMAGE * Math.pow(2, this.weaponLevel);
     m.radius = 5 + this.weaponLevel * 2;
     return m;
   }
@@ -125,6 +129,7 @@ class Tank {
       shielded: this.shielded, boostTurns: this.boostTurns, ammo: this.ammo,
       missiles: this.missiles, weaponLevel: this.weaponLevel,
       canFireMissile: this.canFireMissile(),
+      roundsSinceLastFire: this.roundsSinceLastFire,
     };
   }
 }

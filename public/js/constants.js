@@ -5,10 +5,16 @@ const CONST = {
   // Tank
   TANK_SIZE: 30,
   TANK_HP: 100,
-  TANK_INIT_AMMO: 3,       // Initial ammo count per tank
+  TANK_INIT_AMMO: 5,       // Initial ammo count per tank
+  TANK_INIT_MISSILES: 1,   // Initial missile count per tank
   MOVE_DISTANCE: 30,       // Pixels per move action (base, on floor)
   ROTATE_DEGREES: 30,      // Degrees per rotate action
   BULLET_DAMAGE: 20,
+  MISSILE_DAMAGE: 35,
+  FIRE_COOLDOWN: 1,        // Cooldown turns after firing bullet
+  MISSILE_COOLDOWN: 1,     // Cooldown turns after firing missile
+  FORCE_FIRE_INTERVAL: 3,  // Must fire at least once within this many rounds
+  MAX_FIELD_ITEMS: 8,      // Maximum number of active items on the battlefield
 
   // Bullet
   BULLET_SPEED: 8,

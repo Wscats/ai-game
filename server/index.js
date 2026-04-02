@@ -204,7 +204,7 @@ function buildPrompt(gameState, playerId) {
 
   return `Tank battle game. You are ${playerId}.
 Map: ${gameState.mapWidth}x${gameState.mapHeight}, Round: ${gameState.round}/${gameState.maxRounds}
-YOU: pos(${me.x},${me.y}) angle=${me.angle}° HP=${me.hp}/${me.maxHp} ammo=${me.ammo} missiles=${me.missiles || 0} weaponLv=${me.weaponLevel || 0} canFire=${me.canFire} canFireMissile=${me.canFireMissile || false} terrain=${myTerrain}
+YOU: pos(${me.x},${me.y}) angle=${me.angle}° HP=${me.hp}/${me.maxHp} ammo=${me.ammo} missiles=${me.missiles || 0} weaponLv=${me.weaponLevel || 0} canFire=${me.canFire} canFireMissile=${me.canFireMissile || false} terrain=${myTerrain} roundsSinceLastFire=${me.roundsSinceLastFire || 0}/3
 ENEMY: pos(${enemy.x},${enemy.y}) HP=${enemy.hp}/${enemy.maxHp} terrain=${enemyTerrain}
 Distance=${gameState.distance} AngleToEnemy=${gameState.angleToEnemy}° NeedRotate=${gameState.angleDiff > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(gameState.angleDiff).toFixed(0)}°
 LineOfSight=${gameState.lineOfSight ? 'CLEAR' : 'BLOCKED'}
@@ -214,9 +214,11 @@ TerrainRules: ${terrainRules}
 FieldEvents: ${gameState.fieldEvents && gameState.fieldEvents.length > 0 ? gameState.fieldEvents.map(e => `${e.type}@(${e.x},${e.y})`).join(', ') : 'None'}
 
 Actions: move_forward, move_backward, rotate_left(30°), rotate_right(30°), fire(if canFire AND ammo>0), fire_missile(if canFireMissile AND missiles>0, penetrates buildings!)
-Rules: bullet=20dmg(+10/weaponLv), missile=35dmg(+10/weaponLv) PENETRATES buildings, brick walls DESTROYED by bullet, steel walls STOP bullet(no reflect). Forest hides you.
-Items: supply=+30HP, mine=-25HP, shield=absorb1hit, boost=2x speed 2turns, poison=cloud-8HP/round, ammo=+3bullets, missile=+1missile(penetrates buildings), weapon_upgrade=+dmg&range. Avoid water(impassable).
-IMPORTANT: NO waiting allowed - you MUST move every turn. If ammo=0 you CANNOT fire, pick up ammo item first. Use fire_missile when LineOfSight is BLOCKED to hit through buildings!
+Rules: bullet=20dmg, missile=35dmg, weapon_upgrade=DOUBLES damage per level. DISTANCE MATTERS: damage follows bell curve - optimal range ~165px=1.5x dmg(max), point-blank=0.3x, very far=0.3x. Closer to 165px = more damage!
+Cooldown: fire=1turn, missile=1turn. FORCED FIRE: must fire at least once every 3 rounds or system auto-fires!
+brick walls DESTROYED by bullet, steel walls STOP bullet(no reflect). Forest hides you.
+Items: supply=+30HP, mine=-25HP, shield=absorb1hit, boost=2x speed 2turns, poison=cloud-8HP/round, ammo=+3bullets, missile=+1missile(penetrates buildings), weapon_upgrade=DOUBLES dmg. Max 8 items on field at once. Avoid water(impassable).
+IMPORTANT: NO waiting allowed - you MUST move every turn. You MUST fire at least once every 3 rounds! If ammo=0 you CANNOT fire, pick up ammo item first. Use fire_missile when LineOfSight is BLOCKED to hit through buildings! Best damage at medium range(80-250px).
 
 Reply ONLY JSON: {"action":"chosen_action","thought":"brief Chinese reason <30chars"}`;
 }

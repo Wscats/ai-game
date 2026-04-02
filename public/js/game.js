@@ -110,11 +110,14 @@ class Game {
     if (this.hasThird && this.tankGreen) this.tankGreen.tickCooldown();
     if (this.hasFourth && this.tankPurple) this.tankPurple.tickCooldown();
 
-    // Trigger random events (every round, sometimes 2 events)
+    // Increment rounds since last fire for all alive tanks
+    for (const tank of this.aliveTanks) {
+      tank.roundsSinceLastFire++;
+    }
+
+    // Trigger exactly one random event per round
     if (this.round > 1) {
       this.triggerRandomEvent();
-      // 40% chance of a second event per round
-      if (Math.random() < 0.4) this.triggerRandomEvent();
     }
 
     // ── Fetch all AI decisions in parallel ──
@@ -209,6 +212,13 @@ class Game {
    * Trigger a random battlefield event
    */
   triggerRandomEvent() {
+    // Check if battlefield already has max items
+    const activeItems = this.randomEvents.filter(e => e.active).length;
+    if (activeItems >= CONST.MAX_FIELD_ITEMS) {
+      this.log(`⚠️ 战场道具已满（${activeItems}/${CONST.MAX_FIELD_ITEMS}），本回合不生成新道具`, 'system');
+      return;
+    }
+
     const events = [
       { type: 'supply', weight: 4 },         // Supply box: heal
       { type: 'mine', weight: 2 },            // Mine: damage on move
@@ -247,8 +257,8 @@ class Game {
       }
       case 'emp': {
         // EMP: all tanks' cooldowns reset to max
-        for (const tank of this.aliveTanks) tank.cooldown = 3;
-        this.log(`⚡ 电磁脉冲！所有坦克炮管冷却重置为 3 回合`, 'system');
+        for (const tank of this.aliveTanks) tank.cooldown = 2;
+        this.log(`⚡ 电磁脉冲！所有坦克炮管冷却重置为 2 回合`, 'system');
         break;
       }
       case 'collapse': {
@@ -379,8 +389,8 @@ class Game {
           this.renderer.addExplosion(tank.x, tank.y, 18);
         } else if (event.type === 'weapon_upgrade') {
           tank.weaponLevel++;
-          const dmgBonus = tank.weaponLevel * 10;
-          this.log(`⬆️ ${icon} ${tank.name} 武器升级！(Lv${tank.weaponLevel} → +${dmgBonus}伤害，攻击范围增大)`, tank.id);
+          const dmgMult = Math.pow(2, tank.weaponLevel);
+          this.log(`⬆️ ${icon} ${tank.name} 武器升级！(Lv${tank.weaponLevel} → 伤害${dmgMult}倍，攻击范围增大)`, tank.id);
           this.renderer.addExplosion(tank.x, tank.y, 20);
         }
       }
@@ -473,12 +483,16 @@ class Game {
           await this.animateBulletTrail(result.trail, playerId);
 
           if (result.hit) {
-            result.hit.takeDamage(bullet.damage);
+            // Apply distance-based damage multiplier
+            const dmgMult = result.damageMultiplier || 1;
+            const finalDmg = Math.round(bullet.damage * dmgMult);
+            const rangeLabel = dmgMult >= 1.3 ? '最佳距离' : dmgMult >= 0.9 ? '中距离' : dmgMult >= 0.5 ? '偏远' : '极端距离';
+            result.hit.takeDamage(finalDmg);
             tank.shotsHit++;
-            tank.damageDealt += bullet.damage;
+            tank.damageDealt += finalDmg;
             this.renderer.addExplosion(result.hit.x, result.hit.y, 25);
             const targetIcon = result.hit.id === 'red' ? '🔴' : result.hit.id === 'blue' ? '🔵' : result.hit.id === 'green' ? '🟢' : '🟣';
-            this.log(`💥 ${icon} 命中 ${targetIcon} ${result.hit.name}！(-${bullet.damage}HP → ${result.hit.hp}HP) 剩余弹药:${tank.ammo}`, 'damage');
+            this.log(`💥 ${icon} ${rangeLabel}命中 ${targetIcon} ${result.hit.name}！(-${finalDmg}HP → ${result.hit.hp}HP) 剩余弹药:${tank.ammo}`, 'damage');
             if (!result.hit.alive) {
               this._checkWinCondition();
               return;
@@ -506,12 +520,16 @@ class Game {
           await this.animateBulletTrail(mResult.trail, playerId, true);
 
           if (mResult.hit) {
-            mResult.hit.takeDamage(missile.damage);
+            // Apply distance-based damage multiplier
+            const mDmgMult = mResult.damageMultiplier || 1;
+            const mFinalDmg = Math.round(missile.damage * mDmgMult);
+            const mRangeLabel = mDmgMult >= 1.3 ? '最佳距离' : mDmgMult >= 0.9 ? '中距离' : mDmgMult >= 0.5 ? '偏远' : '极端距离';
+            mResult.hit.takeDamage(mFinalDmg);
             tank.shotsHit++;
-            tank.damageDealt += missile.damage;
+            tank.damageDealt += mFinalDmg;
             this.renderer.addExplosion(mResult.hit.x, mResult.hit.y, 35);
             const targetIcon = mResult.hit.id === 'red' ? '🔴' : mResult.hit.id === 'blue' ? '🔵' : mResult.hit.id === 'green' ? '🟢' : '🟣';
-            this.log(`🚀💥 ${icon} 导弹命中 ${targetIcon} ${mResult.hit.name}！(-${missile.damage}HP → ${mResult.hit.hp}HP) 剩余导弹:${tank.missiles}`, 'damage');
+            this.log(`🚀💥 ${icon} 导弹${mRangeLabel}命中 ${targetIcon} ${mResult.hit.name}！(-${mFinalDmg}HP → ${mResult.hit.hp}HP) 剩余导弹:${tank.missiles}`, 'damage');
             if (!mResult.hit.alive) {
               this._checkWinCondition();
               return;
@@ -535,6 +553,62 @@ class Game {
       this.log(`⚠️ ${icon} ${tank.name} 强制移动：${forcedDesc}`, 'system');
       actionDesc = actionDesc ? `${actionDesc} + ${forcedDesc}` : forcedDesc;
       didMove = true;
+    }
+
+    // ── Forced fire rule: must fire at least once every 3 rounds ──
+    if (tank.roundsSinceLastFire >= CONST.FORCE_FIRE_INTERVAL && action !== 'fire' && action !== 'fire_missile') {
+      // Force fire if possible
+      if (tank.canFire()) {
+        const forcedBullet = tank.fire();
+        if (forcedBullet) {
+          this.log(`🔥 ${icon} ${tank.name} 强制开火！(已${CONST.FORCE_FIRE_INTERVAL}回合未开火)`, 'system');
+          const fResult = forcedBullet.simulate(this.map, this.aliveTanks);
+          this.renderState();
+          await this.animateBulletTrail(fResult.trail, playerId);
+          if (fResult.hit) {
+            const fDmgMult = fResult.damageMultiplier || 1;
+            const fFinalDmg = Math.round(forcedBullet.damage * fDmgMult);
+            fResult.hit.takeDamage(fFinalDmg);
+            tank.shotsHit++;
+            tank.damageDealt += fFinalDmg;
+            this.renderer.addExplosion(fResult.hit.x, fResult.hit.y, 25);
+            const tgtIcon = fResult.hit.id === 'red' ? '🔴' : fResult.hit.id === 'blue' ? '🔵' : fResult.hit.id === 'green' ? '🟢' : '🟣';
+            this.log(`💥 ${icon} 强制开火命中 ${tgtIcon} ${fResult.hit.name}！(-${fFinalDmg}HP → ${fResult.hit.hp}HP)`, 'damage');
+            if (!fResult.hit.alive) {
+              this._checkWinCondition();
+              if (this.gameOver) return;
+            }
+          } else {
+            this.log(`${icon} 强制开火未命中 剩余弹药:${tank.ammo}`, playerId);
+          }
+        }
+      } else if (tank.canFireMissile()) {
+        const forcedMissile = tank.fireMissile();
+        if (forcedMissile) {
+          this.log(`🔥 ${icon} ${tank.name} 强制发射导弹！(已${CONST.FORCE_FIRE_INTERVAL}回合未开火)`, 'system');
+          const fmResult = forcedMissile.simulate(this.map, this.aliveTanks);
+          this.renderState();
+          await this.animateBulletTrail(fmResult.trail, playerId, true);
+          if (fmResult.hit) {
+            const fmDmgMult = fmResult.damageMultiplier || 1;
+            const fmFinalDmg = Math.round(forcedMissile.damage * fmDmgMult);
+            fmResult.hit.takeDamage(fmFinalDmg);
+            tank.shotsHit++;
+            tank.damageDealt += fmFinalDmg;
+            this.renderer.addExplosion(fmResult.hit.x, fmResult.hit.y, 35);
+            const tgtIcon = fmResult.hit.id === 'red' ? '🔴' : fmResult.hit.id === 'blue' ? '🔵' : fmResult.hit.id === 'green' ? '🟢' : '🟣';
+            this.log(`🚀💥 ${icon} 强制导弹命中 ${tgtIcon} ${fmResult.hit.name}！(-${fmFinalDmg}HP → ${fmResult.hit.hp}HP)`, 'damage');
+            if (!fmResult.hit.alive) {
+              this._checkWinCondition();
+              if (this.gameOver) return;
+            }
+          } else {
+            this.log(`🚀 ${icon} 强制导弹未命中 剩余导弹:${tank.missiles}`, playerId);
+          }
+        }
+      } else {
+        this.log(`⚠️ ${icon} ${tank.name} 已${CONST.FORCE_FIRE_INTERVAL}回合未开火，但无弹药可用！`, 'system');
+      }
     }
 
     // Check random events after movement

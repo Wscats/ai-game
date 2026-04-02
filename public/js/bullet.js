@@ -41,7 +41,10 @@ class Bullet {
         const dist = Math.sqrt((nx - tank.x) ** 2 + (ny - tank.y) ** 2);
         if (dist < this.radius + tank.size / 2) {
           trail.push({ x: nx, y: ny });
-          return { hit: tank, hitObstacle: null, trail, finalX: nx, finalY: ny };
+          // Calculate distance-based damage multiplier
+          const travelDist = Math.sqrt((nx - this.x) ** 2 + (ny - this.y) ** 2);
+          const dmgMult = this._distanceDamageMultiplier(travelDist);
+          return { hit: tank, hitObstacle: null, trail, finalX: nx, finalY: ny, damageMultiplier: dmgMult };
         }
       }
 
@@ -113,7 +116,10 @@ class Bullet {
         const dist = Math.sqrt((nx - tank.x) ** 2 + (ny - tank.y) ** 2);
         if (dist < this.radius + tank.size / 2) {
           trail.push({ x: nx, y: ny });
-          return { hit: tank, hitObstacle: null, trail, finalX: nx, finalY: ny, isMissile: true };
+          // Calculate distance-based damage multiplier for missile
+          const travelDist = Math.sqrt((nx - this.x) ** 2 + (ny - this.y) ** 2);
+          const dmgMult = this._distanceDamageMultiplier(travelDist);
+          return { hit: tank, hitObstacle: null, trail, finalX: nx, finalY: ny, isMissile: true, damageMultiplier: dmgMult };
         }
       }
 
@@ -130,5 +136,26 @@ class Bullet {
 
     trail.push({ x: cx, y: cy });
     return { hit: null, hitObstacle: null, trail, finalX: cx, finalY: cy, isMissile: true };
+  }
+
+  /**
+   * Distance-based damage multiplier (smooth bell curve):
+   * The closer to optimal range (165px), the higher the damage.
+   * Point-blank (0px): ~0.3x (very low)
+   * Close range (~80px): ~0.9x
+   * Optimal range (165px): 1.5x (peak damage)
+   * Far range (~250px): ~0.9x
+   * Very far (400px+): ~0.3x (very low)
+   *
+   * Uses Gaussian curve: mult = base + (peak - base) * exp(-((dist - optimal)^2) / (2 * sigma^2))
+   */
+  _distanceDamageMultiplier(distance) {
+    const optimal = 165;   // Optimal range for max damage
+    const peak = 1.5;      // Max multiplier at optimal range
+    const base = 0.3;      // Min multiplier at extreme distances
+    const sigma = 100;     // Controls curve width
+
+    const mult = base + (peak - base) * Math.exp(-Math.pow(distance - optimal, 2) / (2 * sigma * sigma));
+    return Math.round(mult * 100) / 100; // Round to 2 decimal places
   }
 }

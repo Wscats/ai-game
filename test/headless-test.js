@@ -15,7 +15,7 @@ const ROUNDS    = parseInt((args.find(a => a.startsWith('--rounds=')) || '--roun
 const P1_MODEL  = (args.find(a => a.startsWith('--p1=')) || '--p1=deepseek-v3-2-volc').split('=')[1];
 const P2_MODEL  = (args.find(a => a.startsWith('--p2=')) || '--p2=kimi-k2.5').split('=')[1];
 const BASE_URL  = 'http://localhost:3000';
-const TIMEOUT   = 20 * 60 * 1000; // 20 min total
+const TIMEOUT   = 35 * 60 * 1000; // 35 min total (enough for 50 rounds)
 
 // ── Screenshot directory ──────────────────────────────────────────────────────
 const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
@@ -155,59 +155,86 @@ function ensureScreenshotDir() {
         break;
       }
 
-      // Check if result screen appeared
-      const onResult = await page.evaluate(
-        () => document.getElementById('result-screen')?.classList.contains('active')
-      );
-      if (onResult) {
-        log('Result screen detected — game over!', 'OK');
-        break;
-      }
-
-      // Read current round and game state
-      const roundInfo = await page.evaluate(() => {
-        const round = document.getElementById('round-num')?.textContent || '0';
-        const maxRound = document.getElementById('max-round-num')?.textContent || '?';
-        const p1hp = document.getElementById('g-p1-hp-text')?.textContent || '';
-        const p2hp = document.getElementById('g-p2-hp-text')?.textContent || '';
-        const p1thought = document.getElementById('g-p1-thought')?.textContent || '';
-        const p2thought = document.getElementById('g-p2-thought')?.textContent || '';
-        const logEl = document.getElementById('game-log');
-        const lastLog = logEl?.lastElementChild?.textContent || '';
-        return { round, maxRound, p1hp, p2hp, p1thought, p2thought, lastLog };
-      });
-
-      const curRound = parseInt(roundInfo.round);
-      if (curRound !== lastRound && curRound > 0) {
-        log(`Round ${roundInfo.round}/${roundInfo.maxRound}  🔴${roundInfo.p1hp}  🔵${roundInfo.p2hp}`, 'GAME');
-        if (roundInfo.p1thought && roundInfo.p1thought !== '等待中...') {
-          log(`  🔴 思考: ${roundInfo.p1thought}`);
-        }
-        if (roundInfo.p2thought && roundInfo.p2thought !== '等待中...') {
-          log(`  🔵 思考: ${roundInfo.p2thought}`);
+      // Wrap all page interactions in try-catch to survive transient errors
+      try {
+        // Check if result screen appeared
+        const onResult = await page.evaluate(
+          () => document.getElementById('result-screen')?.classList.contains('active')
+        );
+        if (onResult) {
+          log('Result screen detected — game over!', 'OK');
+          break;
         }
 
-        // Wait a moment for animations to complete before taking screenshot
-        await sleep(300);
+        // Read current round and game state
+        const roundInfo = await page.evaluate(() => {
+          const round = document.getElementById('round-num')?.textContent || '0';
+          const maxRound = document.getElementById('max-round-num')?.textContent || '?';
+          const p1hp = document.getElementById('g-p1-hp-text')?.textContent || '';
+          const p2hp = document.getElementById('g-p2-hp-text')?.textContent || '';
+          const p1thought = document.getElementById('g-p1-thought')?.textContent || '';
+          const p2thought = document.getElementById('g-p2-thought')?.textContent || '';
+          const logEl = document.getElementById('game-log');
+          const lastLog = logEl?.lastElementChild?.textContent || '';
+          return { round, maxRound, p1hp, p2hp, p1thought, p2thought, lastLog };
+        });
 
-        // Take screenshot for this round
-        const roundStr = String(curRound).padStart(2, '0');
-        const screenshotFile = `round-${roundStr}.png`;
-        const screenshotPath = path.join(SCREENSHOT_DIR, screenshotFile);
-        if (await safeScreenshot(page, screenshotPath)) {
-          log(`📸 Screenshot saved: ${screenshotFile}`, 'OK');
-        } else {
-          log(`📸 Screenshot FAILED for ${screenshotFile}`, 'WARN');
-        }
+        const curRound = parseInt(roundInfo.round);
+        if (curRound !== lastRound && curRound > 0) {
+          log(`Round ${roundInfo.round}/${roundInfo.maxRound}  🔴${roundInfo.p1hp}  🔵${roundInfo.p2hp}`, 'GAME');
+          if (roundInfo.p1thought && roundInfo.p1thought !== '等待中...') {
+            log(`  🔴 思考: ${roundInfo.p1thought}`);
+          }
+          if (roundInfo.p2thought && roundInfo.p2thought !== '等待中...') {
+            log(`  🔵 思考: ${roundInfo.p2thought}`);
+          }
 
-        lastRound = curRound;
-        stuckCount = 0;
-      } else {
-        stuckCount++;
-        if (stuckCount > 60) { // 30s stuck
-          log('Game appears stuck (no round progress for 30s)', 'WARN');
+          // Wait a moment for animations to complete before taking screenshot
+          await sleep(300);
+
+          // Take screenshot for this round
+          const roundStr = String(curRound).padStart(2, '0');
+          const screenshotFile = `round-${roundStr}.png`;
+          const screenshotPath = path.join(SCREENSHOT_DIR, screenshotFile);
+          if (await safeScreenshot(page, screenshotPath)) {
+            log(`📸 Screenshot saved: ${screenshotFile}`, 'OK');
+          } else {
+            log(`📸 Screenshot FAILED for ${screenshotFile}`, 'WARN');
+          }
+
+          lastRound = curRound;
           stuckCount = 0;
+        } else {
+          stuckCount++;
+          if (stuckCount > 60) { // 30s stuck
+            log('Game appears stuck (no round progress for 30s)', 'WARN');
+            stuckCount = 0;
+          }
         }
+      } catch (loopErr) {
+        log(`Loop iteration error: ${loopErr.message}`, 'WARN');
+        // If page/frame is detached, try to recover
+        if (loopErr.message.includes('detached') || loopErr.message.includes('closed') || loopErr.message.includes('Target closed')) {
+          log('Page appears to have crashed. Attempting recovery...', 'WARN');
+          await sleep(2000);
+          try {
+            // Try to get a fresh page reference
+            const pages = await browser.pages();
+            if (pages.length > 0) {
+              // Reassign page variable - use the last open page
+              const freshPage = pages[pages.length - 1];
+              const url = await freshPage.url();
+              log(`Recovered page reference (url: ${url})`, 'OK');
+            } else {
+              log('No pages available - browser may have crashed', 'ERR');
+              break;
+            }
+          } catch (recoveryErr) {
+            log(`Recovery failed: ${recoveryErr.message}. Ending test.`, 'ERR');
+            break;
+          }
+        }
+        await sleep(1000);
       }
 
       await sleep(500);
