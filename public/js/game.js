@@ -346,11 +346,11 @@ class Game {
     for (const event of this.randomEvents) {
       if (!event.active) continue;
       const dist = Math.sqrt((tank.x - event.x) ** 2 + (tank.y - event.y) ** 2);
-      const icon = tank.id === 'red' ? '🔴' : tank.id === 'blue' ? '🔵' : tank.id === 'green' ? '🟢' : '🟣';
 
       // Poison cloud: tick damage every time tank is inside (don't deactivate)
       if (event.type === 'poison') {
         if (dist <= event.radius) {
+          const icon = tank.id === 'red' ? '🔴' : tank.id === 'blue' ? '🔵' : tank.id === 'green' ? '🟢' : '🟣';
           tank.takeDamage(8);
           this.log(`☠️ ${icon} ${tank.name} 在毒雾中！(-8HP → ${tank.hp}HP)`, 'damage');
           this.renderer.addExplosion(tank.x, tank.y, 10);
@@ -360,6 +360,18 @@ class Game {
       }
 
       if (dist <= event.radius + tank.size / 2) {
+        const icon = tank.id === 'red' ? '🔴' : tank.id === 'blue' ? '🔵' : tank.id === 'green' ? '🟢' : '🟣';
+
+        // Items that go into inventory (shield, boost, weapon_upgrade)
+        const inventoryItems = ['shield', 'boost', 'weapon_upgrade'];
+        if (inventoryItems.includes(event.type)) {
+          // Check if tank inventory is full
+          if (tank.items.length >= CONST.MAX_TANK_ITEMS) {
+            // Can't pick up — inventory full, skip this event
+            continue;
+          }
+        }
+
         event.active = false;
         if (event.type === 'supply') {
           const heal = Math.min(30, tank.maxHp - tank.hp);
@@ -372,12 +384,12 @@ class Game {
           this.renderer.addExplosion(tank.x, tank.y, 25);
           if (!tank.alive) { this.endGame(tank.id === 'red' ? 'blue' : 'red'); return true; }
         } else if (event.type === 'shield') {
-          tank.shielded = true;
-          this.log(`🛡️ ${icon} ${tank.name} 获得护盾！下次受击免疫伤害`, tank.id);
+          tank.addItem({ type: 'shield' });
+          this.log(`🛡️ ${icon} ${tank.name} 获得护盾！(道具栏${tank.items.length}/${CONST.MAX_TANK_ITEMS}) 受击时自动消耗`, tank.id);
           this.renderer.addExplosion(tank.x, tank.y, 15);
         } else if (event.type === 'boost') {
-          tank.boostTurns = 2;
-          this.log(`⚡ ${icon} ${tank.name} 获得加速！接下来 2 回合移动距离翻倍`, tank.id);
+          tank.addItem({ type: 'boost', turns: 2 });
+          this.log(`⚡ ${icon} ${tank.name} 获得加速道具！(道具栏${tank.items.length}/${CONST.MAX_TANK_ITEMS}) 2回合移动翻倍`, tank.id);
           this.renderer.addExplosion(tank.x, tank.y, 15);
         } else if (event.type === 'ammo') {
           tank.ammo += 3;
@@ -388,9 +400,10 @@ class Game {
           this.log(`🚀 ${icon} ${tank.name} 获得导弹！(+1枚 → 共${tank.missiles}枚，可穿透建筑物)`, tank.id);
           this.renderer.addExplosion(tank.x, tank.y, 18);
         } else if (event.type === 'weapon_upgrade') {
+          tank.addItem({ type: 'weapon_upgrade' });
           tank.weaponLevel++;
           const dmgMult = Math.pow(2, tank.weaponLevel);
-          this.log(`⬆️ ${icon} ${tank.name} 武器升级！(Lv${tank.weaponLevel} → 伤害${dmgMult}倍，攻击范围增大)`, tank.id);
+          this.log(`⬆️ ${icon} ${tank.name} 武器升级！(Lv${tank.weaponLevel} → 伤害${dmgMult}倍) (道具栏${tank.items.length}/${CONST.MAX_TANK_ITEMS})`, tank.id);
           this.renderer.addExplosion(tank.x, tank.y, 20);
         }
       }
@@ -674,6 +687,7 @@ class Game {
       fieldEvents: this.randomEvents.filter(e => e.active).map(e => ({
         type: e.type, x: Math.round(e.x), y: Math.round(e.y),
       })),
+      myItems: me.items ? me.items.map(i => i.type) : [],
     };
   }
 
@@ -796,12 +810,14 @@ class Game {
         shots: this.tankRed.shotsFired, hits: this.tankRed.shotsHit,
         accuracy: this.tankRed.shotsFired > 0 ? Math.round(this.tankRed.shotsHit / this.tankRed.shotsFired * 100) : 0,
         missiles: this.tankRed.missiles, weaponLevel: this.tankRed.weaponLevel,
+        items: this.tankRed.items ? this.tankRed.items.map(i => i.type) : [],
       },
       blue: {
         hp: this.tankBlue.hp, maxHp: this.tankBlue.maxHp,
         shots: this.tankBlue.shotsFired, hits: this.tankBlue.shotsHit,
         accuracy: this.tankBlue.shotsFired > 0 ? Math.round(this.tankBlue.shotsHit / this.tankBlue.shotsFired * 100) : 0,
         missiles: this.tankBlue.missiles, weaponLevel: this.tankBlue.weaponLevel,
+        items: this.tankBlue.items ? this.tankBlue.items.map(i => i.type) : [],
       },
     };
     if (this.hasThird && this.tankGreen) {
@@ -810,6 +826,7 @@ class Game {
         shots: this.tankGreen.shotsFired, hits: this.tankGreen.shotsHit,
         accuracy: this.tankGreen.shotsFired > 0 ? Math.round(this.tankGreen.shotsHit / this.tankGreen.shotsFired * 100) : 0,
         missiles: this.tankGreen.missiles, weaponLevel: this.tankGreen.weaponLevel,
+        items: this.tankGreen.items ? this.tankGreen.items.map(i => i.type) : [],
       };
     }
     if (this.hasFourth && this.tankPurple) {
@@ -818,6 +835,7 @@ class Game {
         shots: this.tankPurple.shotsFired, hits: this.tankPurple.shotsHit,
         accuracy: this.tankPurple.shotsFired > 0 ? Math.round(this.tankPurple.shotsHit / this.tankPurple.shotsFired * 100) : 0,
         missiles: this.tankPurple.missiles, weaponLevel: this.tankPurple.weaponLevel,
+        items: this.tankPurple.items ? this.tankPurple.items.map(i => i.type) : [],
       };
     }
     return state;

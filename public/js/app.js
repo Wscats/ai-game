@@ -327,6 +327,29 @@
     game.start();
   }
 
+  // ========== Item Slots Helper ==========
+  const ITEM_EMOJI = { shield: '🛡', boost: '⚡', weapon_upgrade: '⬆' };
+  function _renderItemSlots(elId, items) {
+    const el = $(elId);
+    if (!el) return;
+    el.innerHTML = '';
+    const maxItems = 2; // CONST.MAX_TANK_ITEMS
+    for (let i = 0; i < maxItems; i++) {
+      const slot = document.createElement('span');
+      if (i < items.length) {
+        const type = items[i];
+        slot.className = `tank-item-slot item-${type}`;
+        slot.textContent = ITEM_EMOJI[type] || '?';
+        slot.title = type === 'shield' ? '护盾' : type === 'boost' ? '加速' : type === 'weapon_upgrade' ? '武器升级' : type;
+      } else {
+        slot.className = 'tank-item-slot item-empty';
+        slot.textContent = '·';
+        slot.title = '空槽位';
+      }
+      el.appendChild(slot);
+    }
+  }
+
   // ========== UI Updates ==========
   function updateUI(state) {
     $('round-num').textContent = state.round;
@@ -340,6 +363,7 @@
     $('g-p1-accuracy').textContent = state.red.accuracy + '%';
     $('g-p1-missiles').textContent = state.red.missiles || 0;
     $('g-p1-weapon').textContent = `Lv${state.red.weaponLevel || 0}`;
+    _renderItemSlots('g-p1-items', state.red.items || []);
 
     // Blue
     const bluePct = state.blue.hp / state.blue.maxHp * 100;
@@ -350,6 +374,7 @@
     $('g-p2-accuracy').textContent = state.blue.accuracy + '%';
     $('g-p2-missiles').textContent = state.blue.missiles || 0;
     $('g-p2-weapon').textContent = `Lv${state.blue.weaponLevel || 0}`;
+    _renderItemSlots('g-p2-items', state.blue.items || []);
 
     // Green
     if (state.hasThird && state.green) {
@@ -361,6 +386,7 @@
       $('g-p3-accuracy').textContent = state.green.accuracy + '%';
       $('g-p3-missiles').textContent = state.green.missiles || 0;
       $('g-p3-weapon').textContent = `Lv${state.green.weaponLevel || 0}`;
+      _renderItemSlots('g-p3-items', state.green.items || []);
       if (greenPct <= 20) $('g-p3-hp').classList.add('hp-critical');
       else $('g-p3-hp').classList.remove('hp-critical');
     }
@@ -375,6 +401,7 @@
       $('g-p4-accuracy').textContent = state.purple.accuracy + '%';
       $('g-p4-missiles').textContent = state.purple.missiles || 0;
       $('g-p4-weapon').textContent = `Lv${state.purple.weaponLevel || 0}`;
+      _renderItemSlots('g-p4-items', state.purple.items || []);
       if (purplePct <= 20) $('g-p4-hp').classList.add('hp-critical');
       else $('g-p4-hp').classList.remove('hp-critical');
     }

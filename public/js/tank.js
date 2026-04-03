@@ -25,6 +25,7 @@ class Tank {
     this.missiles = CONST.TANK_INIT_MISSILES; // Missile count (penetrates buildings)
     this.weaponLevel = 0;           // Weapon upgrade level (0=base, each +1 = damage doubles)
     this.roundsSinceLastFire = 0;   // Rounds since last fire (for forced fire rule)
+    this.items = [];                  // Held items (max 2), e.g. [{type:'shield'}, {type:'boost', turns:2}]
   }
 
   /**
@@ -52,10 +53,24 @@ class Tank {
     // Water is impassable
     if (!terrainInfo.passable) return false;
 
-    // Apply speed multiplier + boost
-    const boostMult = this.boostTurns > 0 ? 2 : 1;
+    // Apply speed multiplier + boost (check items inventory for boost)
+    let boostMult = 1;
+    if (this.boostTurns > 0) {
+      boostMult = 2;
+      this.boostTurns--;
+    } else {
+      // Check for boost item in inventory
+      const boostItem = this.items.find(i => i.type === 'boost');
+      if (boostItem) {
+        boostMult = 2;
+        if (!boostItem.turns) boostItem.turns = 2;
+        boostItem.turns--;
+        if (boostItem.turns <= 0) {
+          this.removeItem('boost');
+        }
+      }
+    }
     const dist = baseDist * terrainInfo.speedMult * boostMult;
-    if (this.boostTurns > 0) this.boostTurns--;
     const nx = this.x + Math.cos(rad) * dist * dir;
     const ny = this.y + Math.sin(rad) * dist * dir;
 
@@ -103,10 +118,41 @@ class Tank {
     m.radius = 5 + this.weaponLevel * 2;
     return m;
   }
+  /**
+   * Add an item to inventory. Returns true if added, false if full.
+   */
+  addItem(item) {
+    if (this.items.length >= CONST.MAX_TANK_ITEMS) return false;
+    this.items.push(item);
+    return true;
+  }
+
+  /**
+   * Remove an item by type. Returns the removed item or null.
+   */
+  removeItem(type) {
+    const idx = this.items.findIndex(i => i.type === type);
+    if (idx === -1) return null;
+    return this.items.splice(idx, 1)[0];
+  }
+
+  /**
+   * Check if tank has a specific item type
+   */
+  hasItem(type) {
+    return this.items.some(i => i.type === type);
+  }
+
   takeDamage(amount) {
-    if (this.shielded) {
+    // Shield item: consume from inventory to absorb hit
+    if (this.hasItem('shield')) {
+      this.removeItem('shield');
       this.shielded = false;
       return; // absorb hit
+    }
+    if (this.shielded) {
+      this.shielded = false;
+      return; // absorb hit (legacy)
     }
     this.hp -= amount;
     this.damageTaken += amount;
@@ -130,6 +176,7 @@ class Tank {
       missiles: this.missiles, weaponLevel: this.weaponLevel,
       canFireMissile: this.canFireMissile(),
       roundsSinceLastFire: this.roundsSinceLastFire,
+      items: this.items.map(i => ({ ...i })),
     };
   }
 }
