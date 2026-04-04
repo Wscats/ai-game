@@ -15,7 +15,7 @@ const ROUNDS    = parseInt((args.find(a => a.startsWith('--rounds=')) || '--roun
 const P1_MODEL  = (args.find(a => a.startsWith('--p1=')) || '--p1=deepseek-v3-2-volc').split('=')[1];
 const P2_MODEL  = (args.find(a => a.startsWith('--p2=')) || '--p2=kimi-k2.5').split('=')[1];
 const BASE_URL  = 'http://localhost:3000';
-const TIMEOUT   = 70 * 60 * 1000; // 70 min total (enough for 100 rounds)
+const TIMEOUT   = 100 * 60 * 1000; // 100 min total (enough for 120 rounds)
 
 // ── Screenshot directory ──────────────────────────────────────────────────────
 const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
